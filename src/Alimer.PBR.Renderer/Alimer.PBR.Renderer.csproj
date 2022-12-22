@@ -1,10 +1,18 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <OutputType>WinExe</OutputType>
     <TargetFramework>net7.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <IsPackable>false</IsPackable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Diagnostics"  />
+    <PackageReference Include="Alimer.Bindings.SDL" />
+    <PackageReference Include="Vortice.Win32.Graphics.Dxgi" />
+    <PackageReference Include="Vortice.Win32.Graphics.Direct3D11" />
+    <PackageReference Include="Vortice.Win32.Graphics.Direct3D12" />
+    <PackageReference Include="Vortice.Vulkan" />
+    
+  </ItemGroup>
 
 </Project>
