@@ -1,0 +1,38 @@
+<Project>
+  <!-- https://learn.microsoft.com/nuget/consume-packages/central-package-management -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <GlobalPackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1" />
+    <GlobalPackageReference Include="PolySharp" Version="1.8.1" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <VorticeWin32Version>1.9.3</VorticeWin32Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Engine -->
+    <PackageVersion Include="CommunityToolkit.Diagnostics" Version="8.0.0" />
+    <PackageVersion Include="Vortice.Win32.Graphics.Dxgi" Version="$(VorticeWin32Version)" />
+    <PackageVersion Include="Vortice.Win32.Graphics.Direct3D11" Version="$(VorticeWin32Version)" />
+    <PackageVersion Include="Vortice.Win32.Graphics.Direct3D12" Version="$(VorticeWin32Version)" />
+    <PackageVersion Include="Vortice.Win32.Graphics.Direct3D.Dxc" Version="$(VorticeWin32Version)" />
+    <PackageVersion Include="Vortice.Win32.Graphics.Direct3D.Fxc" Version="$(VorticeWin32Version)" />
+    <PackageVersion Include="Vortice.Vulkan" Version="1.5.26" />
+    <PackageVersion Include="StbImageSharp" Version="2.27.13" />
+
+    <PackageVersion Include="Alimer.Bindings.SDL" Version="1.0.2" />
+
+    <!-- Windows Modern/WinUI -->
+    <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.2.221209.1" />
+
+    <!-- Assets/ Tools -->
+    <PackageVersion Include="SkiaSharp" Version="2.88.3" />
+
+  </ItemGroup>
+
+</Project>
