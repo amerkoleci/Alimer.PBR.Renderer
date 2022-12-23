@@ -11,7 +11,7 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <VorticeWin32Version>1.9.3</VorticeWin32Version>
+    <VorticeWin32Version>1.9.4</VorticeWin32Version>
   </PropertyGroup>
 
   <ItemGroup>

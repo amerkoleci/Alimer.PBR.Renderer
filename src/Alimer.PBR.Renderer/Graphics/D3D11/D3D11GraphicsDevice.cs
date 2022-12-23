@@ -17,6 +17,8 @@ using Alimer.Bindings.SDL;
 using CommunityToolkit.Diagnostics;
 using System.Drawing;
 using Vortice.Mathematics;
+using Win32.Graphics.Direct3D.Fxc;
+using static Win32.Graphics.Direct3D.Fxc.Apis;
 
 namespace Alimer.Graphics.D3D11;
 
@@ -294,6 +296,20 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
     public override Pipeline CreateRenderPipeline(in RenderPipelineDescription description)
     {
         return new D3D11Pipeline(this, description);
+    }
+
+    public static ReadOnlyMemory<byte> CompileBytecode(string shaderSource, string entryPoint, string profile)
+    {
+        CompileFlags shaderFlags = CompileFlags.EnableStrictness;
+#if DEBUG
+        shaderFlags |= CompileFlags.Debug;
+        shaderFlags |= CompileFlags.SkipValidation;
+#else
+        shaderFlags |= CompileFlags.OptimizationLevel3;
+#endif
+
+        using ComPtr<ID3DBlob> bytecode = D3DCompile(shaderSource, entryPoint, profile, shaderFlags);
+        return default;
     }
 
 #if DEBUG

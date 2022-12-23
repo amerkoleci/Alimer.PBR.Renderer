@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Runtime.InteropServices;
 using Alimer.Bindings.SDL;
 using Alimer.Graphics;
+using Alimer.Graphics.D3D11;
 using Vortice.Mathematics;
 using static Alimer.Bindings.SDL.SDL;
 using static Alimer.Bindings.SDL.SDL.SDL_EventType;
@@ -81,6 +82,15 @@ public sealed class Application : GraphicsObject
     {
         return Image.FromFile(Path.Combine(AppContext.BaseDirectory, "assets", "textures", fileName));
     }
+
+    private static ReadOnlyMemory<byte> CompileShader(string fileName, string entryPoint, string profile)
+    {
+        string filePath = Path.Combine(AppContext.BaseDirectory, "assets", "shaders", fileName);
+        string shaderSource = File.ReadAllText(filePath);
+
+        return D3D11GraphicsDevice.CompileBytecode(shaderSource, entryPoint, profile);
+    }
+
 
     private Texture CreateTexture(Image image)
     {
