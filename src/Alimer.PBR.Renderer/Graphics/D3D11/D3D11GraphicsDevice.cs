@@ -1,9 +1,6 @@
 ﻿// Copyright © Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
-using System.Numerics;
-using Alimer.Bindings.SDL;
-using CommunityToolkit.Diagnostics;
 using Win32;
 using Win32.Graphics.Direct3D;
 using Win32.Graphics.Direct3D11;
@@ -16,53 +13,33 @@ using static Win32.Graphics.Direct3D11.Apis;
 using static Win32.Graphics.Dxgi.Apis;
 using InfoQueueFilter = Win32.Graphics.Direct3D11.InfoQueueFilter;
 using MessageId = Win32.Graphics.Direct3D11.MessageId;
+using Alimer.Bindings.SDL;
+using CommunityToolkit.Diagnostics;
+using System.Drawing;
+using Vortice.Mathematics;
 
-namespace Alimer.PBR.Renderer;
+namespace Alimer.Graphics.D3D11;
 
-public sealed unsafe class D3D11Renderer : IRenderer
+public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
 {
-    private ComPtr<IDXGIFactory2> _dxgiFactory;
-    private bool _isTearingSupported;
-    private ComPtr<ID3D11Device1> _device = default;
-    private ComPtr<ID3D11DeviceContext1> _context = default;
-    private FeatureLevel _featureLevel = FeatureLevel.Level_9_1;
-    private ComPtr<IDXGISwapChain1> _swapChain = default;
+    private readonly ComPtr<IDXGIFactory2> _dxgiFactory;
+    private readonly bool _isTearingSupported;
+    private readonly ComPtr<ID3D11Device1> _device;
+    private readonly ComPtr<ID3D11DeviceContext1> _context;
+    private readonly FeatureLevel _featureLevel = FeatureLevel.Level_9_1;
+    private readonly ComPtr<IDXGISwapChain1> _swapChain;
     private ComPtr<ID3D11Texture2D> _backBufferTexture = default;
     private ComPtr<ID3D11RenderTargetView> _backBufferRTV = default;
 
-    private ComPtr<ID3D11DepthStencilView> depthStencilTextureView = default;
-
+    public Size Size { get; private set; }
     public Format ColorFormat { get; } = Format.B8G8R8A8Unorm;
-    public Format depthStencilFormat { get; } = Format.D32Float;
+    public ID3D11Device1* NativeDevice => _device;
+    public ID3D11DeviceContext1* NativeContext => _context;
 
-    public D3D11Renderer()
-    {
+    public override int Samples { get; }
 
-    }
-
-
-    public void Dispose()
-    {
-        _context.Get()->Flush();
-
-        _backBufferRTV.Dispose();
-        _backBufferTexture.Dispose();
-        _swapChain.Dispose();
-        _context.Dispose();
-        _device.Dispose();
-
-        _dxgiFactory.Dispose();
-
-#if DEBUG
-        using ComPtr<IDXGIDebug1> dxgiDebug = default;
-        if (DXGIGetDebugInterface1(0, __uuidof<IDXGIDebug1>(), dxgiDebug.GetVoidAddressOf()).Success)
-        {
-            dxgiDebug.Get()->ReportLiveObjects(DXGI_DEBUG_ALL, ReportLiveObjectFlags.Summary | ReportLiveObjectFlags.IgnoreInternal);
-        }
-#endif
-    }
-
-    public SDL_Window Initialize(int width, int height, int maxSamples)
+    public D3D11GraphicsDevice(in SDL_Window window, int maxSamples = 4)
+        : base(window, GraphicsBackend.Direct3D11)
     {
 #if DEBUG
         {
@@ -185,66 +162,129 @@ public sealed unsafe class D3D11Renderer : IRenderer
         ThrowIfFailed(tempDevice.CopyTo(_device.GetAddressOf()));
         ThrowIfFailed(tempContext.CopyTo(_context.GetAddressOf()));
 
-        SDL_WindowFlags flags = SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE;
-
-        SDL_Window window = SDL_CreateWindow("Physically Based Rendering (Direct3D 11)",
-            SDL_WINDOWPOS_CENTERED,
-            SDL_WINDOWPOS_CENTERED,
-            width, height, flags);
-
-        SDL_SysWMinfo info = new();
-        SDL_VERSION(out info.version);
-        SDL_GetWindowWMInfo(window, ref info);
-        Guard.IsTrue(info.subsystem == SDL_SYSWM_TYPE.SDL_SYSWM_WINDOWS);
-
-        SwapChainDescription1 swapChainDesc = new()
+        // Determine maximum supported MSAA level.
+        uint samples;
+        for (samples = (uint)maxSamples; samples > 1; samples /= 2)
         {
-            Width = (uint)width,
-            Height = (uint)height,
-            Format = ColorFormat,
-            BufferCount = 2u,
-            BufferUsage = Win32.Graphics.Dxgi.Usage.RenderTargetOutput,
-            SampleDesc = SampleDescription.Default,
-            Scaling = Scaling.Stretch,
-            SwapEffect = SwapEffect.FlipDiscard,
-            AlphaMode = AlphaMode.Ignore,
-            Flags = _isTearingSupported ? SwapChainFlags.AllowTearing : SwapChainFlags.None
-        };
+            uint colorQualityLevels;
+            uint depthStencilQualityLevels;
+            _device.Get()->CheckMultisampleQualityLevels(Format.R16G16B16A16Float, samples, &colorQualityLevels);
+            _device.Get()->CheckMultisampleQualityLevels(Format.D24UnormS8Uint, samples, &depthStencilQualityLevels);
+            if (colorQualityLevels > 0 && depthStencilQualityLevels > 0)
+            {
+                break;
+            }
+        }
 
-        SwapChainFullscreenDescription fsSwapChainDesc = new()
+        Samples = (int)samples;
+
+        // Create SwapChain
         {
-            Windowed = true
-        };
+            SDL_SysWMinfo info = new();
+            SDL_VERSION(out info.version);
+            SDL_GetWindowWMInfo(window, ref info);
+            Guard.IsTrue(info.subsystem == SDL_SYSWM_TYPE.SDL_SYSWM_WINDOWS);
 
-        result = _dxgiFactory.Get()->CreateSwapChainForHwnd(
-             (IUnknown*)_device.Get(),
-            info.info.win.window,
-            &swapChainDesc,
-            &fsSwapChainDesc,
-            null,
-            _swapChain.GetAddressOf()
-            );
-        ThrowIfFailed(result);
+            bool isFullscreen = (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0;
 
-        _dxgiFactory.Get()->MakeWindowAssociation(info.info.win.window, WindowAssociationFlags.NoAltEnter);
+            SwapChainDescription1 swapChainDesc = new()
+            {
+                Width = 0u,
+                Height = 0u,
+                Format = ColorFormat,
+                BufferCount = 2u,
+                BufferUsage = Win32.Graphics.Dxgi.Usage.RenderTargetOutput,
+                SampleDesc = SampleDescription.Default,
+                Scaling = Scaling.Stretch,
+                SwapEffect = SwapEffect.FlipDiscard,
+                AlphaMode = AlphaMode.Ignore,
+                Flags = _isTearingSupported ? SwapChainFlags.AllowTearing : SwapChainFlags.None
+            };
+
+            SwapChainFullscreenDescription fsSwapChainDesc = new()
+            {
+                Windowed = !isFullscreen
+            };
+
+            result = _dxgiFactory.Get()->CreateSwapChainForHwnd(
+                 (IUnknown*)_device.Get(),
+                info.info.win.window,
+                &swapChainDesc,
+                &fsSwapChainDesc,
+                null,
+                _swapChain.GetAddressOf()
+                );
+            ThrowIfFailed(result);
+
+            _dxgiFactory.Get()->MakeWindowAssociation(info.info.win.window, WindowAssociationFlags.NoAltEnter);
+            AfterResize();
+        }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        _context.Get()->Flush();
+
+        base.Dispose(disposing);
+
+        if (disposing)
+        {
+            _backBufferRTV.Dispose();
+            _backBufferTexture.Dispose();
+            _swapChain.Dispose();
+            _context.Dispose();
+            _device.Dispose();
+
+            _dxgiFactory.Dispose();
+
+#if DEBUG
+            using ComPtr<IDXGIDebug1> dxgiDebug = default;
+            if (DXGIGetDebugInterface1(0, __uuidof<IDXGIDebug1>(), dxgiDebug.GetVoidAddressOf()).Success)
+            {
+                dxgiDebug.Get()->ReportLiveObjects(DXGI_DEBUG_ALL, ReportLiveObjectFlags.Summary | ReportLiveObjectFlags.IgnoreInternal);
+            }
+#endif
+        }
+    }
+
+    private void AfterResize()
+    {
+        if (_backBufferTexture.Get() is not null)
+        {
+        }
+
+        SwapChainDescription1 swapChainDesc;
+        ThrowIfFailed(_swapChain.Get()->GetDesc1(&swapChainDesc));
+
+        Size = new Size((int)swapChainDesc.Width, (int)swapChainDesc.Height);
 
         ThrowIfFailed(
             _swapChain.Get()->GetBuffer(0, __uuidof<ID3D11Texture2D>(), _backBufferTexture.GetVoidAddressOf())
             );
 
         ThrowIfFailed(_device.Get()->CreateRenderTargetView(
-          (ID3D11Resource*)_backBufferTexture.Get(), null, _backBufferRTV.GetAddressOf()));
-
-        return window;
+          (ID3D11Resource*)_backBufferTexture.Get(), null, _backBufferRTV.GetAddressOf())
+            );
     }
 
-    public void Render(in SDL_Window window)
+    public override bool BeginFrame()
     {
-        Vector4 clearColor = new(1.0f, 0.0f, 0.0f, 1.0f);
-        _context.Get()->ClearRenderTargetView(_backBufferRTV.Get(), (float*)&clearColor);
-        _context.Get()->OMSetRenderTargets(1, _backBufferRTV.GetAddressOf(), null);
+        return true;
+    }
 
+    public override void EndFrame()
+    {
         _swapChain.Get()->Present(1, 0);
+    }
+
+    public override Texture CreateTexture(in Size3 size, TextureFormat format, TextureUsage usage = TextureUsage.ShaderRead, int sampleCount = 1)
+    {
+        return new D3D11Texture(this, size, format, usage, sampleCount);
+    }
+
+    public override FrameBuffer CreateFrameBuffer(in Size size, int samples, TextureFormat colorFormat, TextureFormat depthstencilFormat)
+    {
+        return new D3D11FrameBuffer(this, size, samples, colorFormat, depthstencilFormat);
     }
 
 #if DEBUG

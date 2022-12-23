@@ -1,6 +1,8 @@
 ﻿// Copyright © Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
+using Alimer.Graphics;
+
 namespace Alimer.PBR.Renderer;
 
 public static class Program
@@ -11,8 +13,7 @@ public static class Program
     //[STAThread]
     public static void Main(string[] args)
     {
-        IRenderer renderer = new D3D11Renderer();
-        using Application app = new(renderer);
+        using Application app = new(GraphicsBackend.Direct3D11);
         app.Run();
     }
 }

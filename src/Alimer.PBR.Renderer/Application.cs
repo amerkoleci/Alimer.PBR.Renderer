@@ -1,11 +1,14 @@
 ﻿// Copyright © Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
+using System.Drawing;
 using System.Runtime.InteropServices;
 using Alimer.Bindings.SDL;
+using Alimer.Graphics;
 using static Alimer.Bindings.SDL.SDL;
 using static Alimer.Bindings.SDL.SDL.SDL_EventType;
 using static Alimer.Bindings.SDL.SDL.SDL_LogPriority;
+using static Alimer.Bindings.SDL.SDL.SDL_WindowFlags;
 
 namespace Alimer.PBR.Renderer;
 
@@ -14,14 +17,14 @@ public sealed class Application : IDisposable
     private const int _eventsPerPeep = 64;
     private static readonly unsafe SDL_Event* _events = (SDL_Event*)NativeMemory.Alloc(_eventsPerPeep, (nuint)sizeof(SDL_Event));
 
-    private readonly IRenderer _renderer;
+    private readonly GraphicsDevice _graphicsDevice;
     private readonly SDL_Window _window;
     private bool _exitRequested;
+    private ViewSettings _viewSettings;
+    private readonly FrameBuffer _framebuffer;
 
-    public Application(IRenderer renderer, int width = 1200, int height = 800, int maxSamples = 16)
+    public Application(GraphicsBackend graphicsBackend, int width = 1200, int height = 800, int maxSamples = 16)
     {
-        _renderer = renderer;
-
         //SDL_GetVersion(out SDL_version version);
         //Log.Info($"SDL v{version.major}.{version.minor}.{version.patch}");
 
@@ -36,14 +39,35 @@ public sealed class Application : IDisposable
             throw new Exception($"Failed to start SDL2: {error}");
         }
 
-        _window = renderer.Initialize(width, height, maxSamples);
-        //Id = SDL_GetWindowID(Handle);
-        //_idLookup.Add(Id, this);
+
+        SDL_WindowFlags flags = SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE;
+
+        _window = SDL_CreateWindow("Physically Based Rendering (Direct3D 11)",
+            SDL_WINDOWPOS_CENTERED,
+            SDL_WINDOWPOS_CENTERED,
+            width, height, flags);
+
+        _graphicsDevice = GraphicsDevice.CreateDefault(_window, maxSamples);
+        _viewSettings = new(0.0f, 0.0f, 150.0f, 45.0f);
+
+        _framebuffer = _graphicsDevice.CreateFrameBuffer(new Size(width, height),
+            _graphicsDevice.Samples, TextureFormat.Rgba16Float, TextureFormat.Depth32FloatStencil8);
+        //if (_graphicsDevice.Samples > 1)
+        //{
+        //    m_resolveFramebuffer = createFrameBuffer(width, height, 1, DXGI_FORMAT_R16G16B16A16_FLOAT, (DXGI_FORMAT)0);
+        //}
+        //else
+        //{
+        //    m_resolveFramebuffer = m_framebuffer;
+        //}
     }
 
     public void Dispose()
     {
-        _renderer.Dispose();
+        _framebuffer.Dispose();
+
+        SDL_DestroyWindow(_window);
+        _graphicsDevice.Dispose();
 
         SDL_Quit();
     }
@@ -61,7 +85,10 @@ public sealed class Application : IDisposable
 
     private void OnTick()
     {
-        _renderer.Render(_window);
+        if (!_graphicsDevice.BeginFrame())
+            return;
+
+        _graphicsDevice.EndFrame();
     }
 
     private unsafe void PollSDLEvents()

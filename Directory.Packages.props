@@ -17,6 +17,7 @@
   <ItemGroup>
     <!-- Engine -->
     <PackageVersion Include="CommunityToolkit.Diagnostics" Version="8.0.0" />
+    <PackageVersion Include="Vortice.Mathematics" Version="1.4.22" />
     <PackageVersion Include="Vortice.Win32.Graphics.Dxgi" Version="$(VorticeWin32Version)" />
     <PackageVersion Include="Vortice.Win32.Graphics.Direct3D11" Version="$(VorticeWin32Version)" />
     <PackageVersion Include="Vortice.Win32.Graphics.Direct3D12" Version="$(VorticeWin32Version)" />
