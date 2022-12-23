@@ -24,6 +24,7 @@ public abstract class GraphicsDevice : GraphicsObject
     /// </summary>
     public GraphicsBackend Backend { get; }
 
+    public abstract CommandContext DefaultContext { get; }
     public abstract int Samples { get; }
 
     public static GraphicsDevice CreateDefault(in SDL_Window window, int maxSamples = 4)
@@ -54,6 +55,8 @@ public abstract class GraphicsDevice : GraphicsObject
     {
         return CreateTexture(description, ref MemoryMarshal.GetReference(initialData));
     }
+
+    public abstract Pipeline CreateRenderPipeline(in RenderPipelineDescription description);
 
     protected abstract unsafe Texture CreateTextureCore(in TextureDescription description, void* initialData); 
 

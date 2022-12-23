@@ -13,7 +13,7 @@ using static Alimer.Bindings.SDL.SDL.SDL_WindowFlags;
 
 namespace Alimer.PBR.Renderer;
 
-public sealed class Application : IDisposable
+public sealed class Application : GraphicsObject
 {
     private const int _eventsPerPeep = 64;
     private static readonly unsafe SDL_Event* _events = (SDL_Event*)NativeMemory.Alloc(_eventsPerPeep, (nuint)sizeof(SDL_Event));
@@ -24,6 +24,7 @@ public sealed class Application : IDisposable
     private ViewSettings _viewSettings;
     private readonly FrameBuffer _framebuffer;
     private readonly FrameBuffer _resolveFramebuffer;
+    private readonly Pipeline _skyboxPipeline;
 
     public Application(GraphicsBackend graphicsBackend, int width = 1200, int height = 800, int maxSamples = 16)
     {
@@ -52,16 +53,23 @@ public sealed class Application : IDisposable
         _graphicsDevice = GraphicsDevice.CreateDefault(_window, maxSamples);
         _viewSettings = new(0.0f, 0.0f, 150.0f, 45.0f);
 
-        _framebuffer = _graphicsDevice.CreateFrameBuffer(new Size(width, height),
-            _graphicsDevice.Samples, TextureFormat.Rgba16Float, TextureFormat.Depth32FloatStencil8);
+        _framebuffer = AddDisposable(_graphicsDevice.CreateFrameBuffer(new Size(width, height),
+            _graphicsDevice.Samples, TextureFormat.Rgba16Float, TextureFormat.Depth32FloatStencil8)
+            );
+
         if (_graphicsDevice.Samples > 1)
         {
-            _resolveFramebuffer = _graphicsDevice.CreateFrameBuffer(new Size(width, height), 1, TextureFormat.Rgba16Float, TextureFormat.Invalid);
+            _resolveFramebuffer = AddDisposable(
+                _graphicsDevice.CreateFrameBuffer(new Size(width, height), 1, TextureFormat.Rgba16Float, TextureFormat.Invalid)
+                );
         }
         else
         {
             _resolveFramebuffer = _framebuffer;
         }
+
+        RenderPipelineDescription skyboxPipelineDesc = new();
+        _skyboxPipeline = AddDisposable(_graphicsDevice.CreateRenderPipeline(skyboxPipelineDesc));
 
         // Load & convert equirectangular environment map to a cubemap texture.
         {
@@ -80,13 +88,9 @@ public sealed class Application : IDisposable
         return _graphicsDevice.CreateTexture(image.Data.Span, desc);
     }
 
-    public void Dispose()
+    protected override void Dispose(bool disposing)
     {
-        if (_resolveFramebuffer != _framebuffer)
-        {
-            _resolveFramebuffer.Dispose();
-        }
-        _framebuffer.Dispose();
+        base.Dispose(disposing);
 
         SDL_DestroyWindow(_window);
         _graphicsDevice.Dispose();
@@ -109,6 +113,24 @@ public sealed class Application : IDisposable
     {
         if (!_graphicsDevice.BeginFrame())
             return;
+
+        CommandContext context = _graphicsDevice.DefaultContext;
+
+        // Prepare framebuffer for rendering.
+        context.SetRenderTarget(_framebuffer);
+
+        // Draw skybox.
+        context.SetPipeline(_skyboxPipeline);
+
+        // Draw a full screen triangle for postprocessing/tone mapping.
+        context.SetRenderTarget(null);
+        //m_context->IASetInputLayout(nullptr);
+        //m_context->VSSetShader(m_tonemapProgram.vertexShader.Get(), nullptr, 0);
+        //m_context->PSSetShader(m_tonemapProgram.pixelShader.Get(), nullptr, 0);
+        //m_context->PSSetShaderResources(0, 1, m_resolveFramebuffer.srv.GetAddressOf());
+        //m_context->PSSetSamplers(0, 1, m_computeSampler.GetAddressOf());
+        //m_context->Draw(3, 0);
+
 
         _graphicsDevice.EndFrame();
     }

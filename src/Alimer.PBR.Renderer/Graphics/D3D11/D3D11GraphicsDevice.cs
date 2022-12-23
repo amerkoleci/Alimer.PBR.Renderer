@@ -35,6 +35,9 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
     public Format ColorFormat { get; } = Format.B8G8R8A8Unorm;
     public ID3D11Device1* NativeDevice => _device;
     public ID3D11DeviceContext1* NativeContext => _context;
+    public ID3D11RenderTargetView* BackBufferRTV => _backBufferRTV;
+
+    public override CommandContext DefaultContext { get; }
 
     public override int Samples { get; }
 
@@ -176,6 +179,7 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
             }
         }
 
+        DefaultContext = new D3D11CommandContext(this);
         Samples = (int)samples;
 
         // Create SwapChain
@@ -285,6 +289,11 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
     public override FrameBuffer CreateFrameBuffer(in Size size, int samples, TextureFormat colorFormat, TextureFormat depthstencilFormat)
     {
         return new D3D11FrameBuffer(this, size, samples, colorFormat, depthstencilFormat);
+    }
+
+    public override Pipeline CreateRenderPipeline(in RenderPipelineDescription description)
+    {
+        return new D3D11Pipeline(this, description);
     }
 
 #if DEBUG

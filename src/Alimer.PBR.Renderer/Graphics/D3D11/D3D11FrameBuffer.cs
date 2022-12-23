@@ -53,4 +53,17 @@ internal sealed unsafe class D3D11FrameBuffer : FrameBuffer
             _depthStencilTexture?.Dispose();
         }
     }
+
+    internal void Bind(ID3D11DeviceContext1* context)
+    {
+        if (_dsv.Get() is null)
+        {
+            context->OMSetRenderTargets(1, _rtv.GetAddressOf(), null);
+        }
+        else
+        {
+            context->OMSetRenderTargets(1, _rtv.GetAddressOf(), _dsv.Get());
+            context->ClearDepthStencilView(_dsv.Get(), ClearFlags.Depth, 1.0f, 0);
+        }
+    }
 }
