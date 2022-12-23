@@ -2,7 +2,9 @@
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using System.Drawing;
+using System.Runtime.InteropServices;
 using Alimer.Bindings.SDL;
+using CommunityToolkit.Diagnostics;
 using Vortice.Mathematics;
 
 namespace Alimer.Graphics;
@@ -32,7 +34,28 @@ public abstract class GraphicsDevice : GraphicsObject
     public abstract bool BeginFrame();
     public abstract void EndFrame();
 
-    public abstract Texture CreateTexture(in Size3 size, TextureFormat format, TextureUsage usage = TextureUsage.ShaderRead, int sampleCount = 1);
+    public unsafe Texture CreateTexture<T>(in TextureDescription description, ref T initialData) where T : unmanaged
+    {
+        Guard.IsGreaterThanOrEqualTo(description.Width, 1, nameof(TextureDescription.Width));
+        Guard.IsGreaterThanOrEqualTo(description.Height, 1, nameof(TextureDescription.Height));
+
+        fixed (void* initialDataPtr = &initialData)
+        {
+            return CreateTextureCore(description, initialDataPtr);
+        }
+    }
+
+    public Texture CreateTexture<T>(Span<T> initialData, in TextureDescription description) where T : unmanaged
+    {
+        return CreateTexture(description, ref MemoryMarshal.GetReference(initialData));
+    }
+
+    public Texture CreateTexture<T>(ReadOnlySpan<T> initialData, in TextureDescription description) where T : unmanaged
+    {
+        return CreateTexture(description, ref MemoryMarshal.GetReference(initialData));
+    }
+
+    protected abstract unsafe Texture CreateTextureCore(in TextureDescription description, void* initialData); 
 
     public abstract FrameBuffer CreateFrameBuffer(in Size size, int samples, TextureFormat colorFormat, TextureFormat depthstencilFormat);
 }

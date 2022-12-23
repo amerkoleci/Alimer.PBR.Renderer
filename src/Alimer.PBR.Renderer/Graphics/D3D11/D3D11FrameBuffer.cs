@@ -26,7 +26,7 @@ internal sealed unsafe class D3D11FrameBuffer : FrameBuffer
             {
                 usage |= TextureUsage.ShaderRead;
             }
-            _colorTexture = new D3D11Texture(device, new Size3(size.Width, size.Height, 1), colorFormat, usage, sampleCount);
+            _colorTexture = new D3D11Texture(device, TextureDescription.Texture2D(colorFormat, size.Width, size.Height, 1, 1, usage, sampleCount));
 
             RenderTargetViewDescription rtvDesc = new(sampleCount > 1 ? RtvDimension.Texture2DMs : RtvDimension.Texture2D, _colorTexture.DxgiFormat);
             ThrowIfFailed(device.NativeDevice->CreateRenderTargetView(_colorTexture.Handle, &rtvDesc, _rtv.GetAddressOf()));
@@ -34,7 +34,7 @@ internal sealed unsafe class D3D11FrameBuffer : FrameBuffer
 
         if (depthStencilFormat != TextureFormat.Invalid)
         {
-            _depthStencilTexture = new D3D11Texture(device, new Size3(size.Width, size.Height, 1), depthStencilFormat, TextureUsage.RenderTarget, sampleCount);
+            _depthStencilTexture = new D3D11Texture(device, TextureDescription.Texture2D(depthStencilFormat, size.Width, size.Height, 1, 1, TextureUsage.RenderTarget, sampleCount));
 
             DepthStencilViewDescription dsvDesc = new(sampleCount > 1 ? DsvDimension.Texture2DMs : DsvDimension.Texture2D, _depthStencilTexture.DxgiFormat);
             ThrowIfFailed(device.NativeDevice->CreateDepthStencilView(_depthStencilTexture.Handle, &dsvDesc, _dsv.GetAddressOf()));

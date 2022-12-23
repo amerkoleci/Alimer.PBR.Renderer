@@ -277,9 +277,9 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
         _swapChain.Get()->Present(1, 0);
     }
 
-    public override Texture CreateTexture(in Size3 size, TextureFormat format, TextureUsage usage = TextureUsage.ShaderRead, int sampleCount = 1)
+    protected override unsafe Texture CreateTextureCore(in TextureDescription description, void* initialData)
     {
-        return new D3D11Texture(this, size, format, usage, sampleCount);
+        return new D3D11Texture(this, description, initialData);
     }
 
     public override FrameBuffer CreateFrameBuffer(in Size size, int samples, TextureFormat colorFormat, TextureFormat depthstencilFormat)

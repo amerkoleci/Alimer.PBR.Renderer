@@ -6,6 +6,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Include="assets\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="CommunityToolkit.Diagnostics" />
     <PackageReference Include="Vortice.Mathematics" />
     <PackageReference Include="Alimer.Bindings.SDL" />
@@ -13,6 +17,9 @@
     <PackageReference Include="Vortice.Win32.Graphics.Direct3D11" />
     <PackageReference Include="Vortice.Win32.Graphics.Direct3D12" />
     <PackageReference Include="Vortice.Vulkan" />
+
+    <PackageReference Include="StbImageSharp" />
+    <PackageReference Include="Silk.NET.Assimp" />
     
   </ItemGroup>
 

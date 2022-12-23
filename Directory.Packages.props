@@ -24,7 +24,9 @@
     <PackageVersion Include="Vortice.Win32.Graphics.Direct3D.Dxc" Version="$(VorticeWin32Version)" />
     <PackageVersion Include="Vortice.Win32.Graphics.Direct3D.Fxc" Version="$(VorticeWin32Version)" />
     <PackageVersion Include="Vortice.Vulkan" Version="1.5.26" />
+
     <PackageVersion Include="StbImageSharp" Version="2.27.13" />
+    <PackageVersion Include="Silk.NET.Assimp" Version="2.16.0" />
 
     <PackageVersion Include="Alimer.Bindings.SDL" Version="1.0.2" />
 

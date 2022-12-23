@@ -90,4 +90,50 @@ internal static class D3D11Utils
                 return Format.Unknown;
         }
     }
+
+    public static Format ToDxgiFormat(this VertexFormat format)
+    {
+        switch (format)
+        {
+            case VertexFormat.Uint8x2:      return Format.R8G8Uint;
+            case VertexFormat.Uint8x4:      return Format.R8G8B8A8Uint;
+            case VertexFormat.Sint8x2:      return Format.R8G8Sint;
+            case VertexFormat.Sint8x4:      return Format.R8G8B8A8Sint;
+            case VertexFormat.Unorm8x2:     return Format.R8G8Unorm;
+            case VertexFormat.Unorm8x4:     return Format.R8G8B8A8Unorm;
+            case VertexFormat.Snorm8x2:     return Format.R8G8Snorm;
+            case VertexFormat.Snorm8x4:     return Format.R8G8B8A8Snorm;
+
+            case VertexFormat.Uint16x2:     return Format.R16G16Uint;
+            case VertexFormat.Uint16x4:     return Format.R16G16B16A16Uint;
+            case VertexFormat.Sint16x2:     return Format.R16G16Sint;
+            case VertexFormat.Sint16x4:     return Format.R16G16B16A16Sint;
+            case VertexFormat.Unorm16x2:    return Format.R16G16Unorm;
+            case VertexFormat.Unorm16x4:    return Format.R16G16B16A16Unorm;
+            case VertexFormat.Snorm16x2:    return Format.R16G16Snorm;
+            case VertexFormat.Snorm16x4:    return Format.R16G16B16A16Snorm;
+            case VertexFormat.Float16x2:    return Format.R16G16Float;
+            case VertexFormat.Float16x4:    return Format.R16G16B16A16Float;
+
+            case VertexFormat.Float32:      return Format.R32Float;
+            case VertexFormat.Float32x2:    return Format.R32G32Float;
+            case VertexFormat.Float32x3:    return Format.R32G32B32Float;
+            case VertexFormat.Float32x4:    return Format.R32G32B32A32Float;
+
+            case VertexFormat.Uint32:       return Format.R32Uint;
+            case VertexFormat.Uint32x2:     return Format.R32G32Uint;
+            case VertexFormat.Uint32x3:     return Format.R32G32B32Uint;
+            case VertexFormat.Uint32x4:     return Format.R32G32B32A32Uint;
+
+            case VertexFormat.Sint32:       return Format.R32Sint;
+            case VertexFormat.Sint32x2:     return Format.R32G32Sint;
+            case VertexFormat.Sint32x3:     return Format.R32G32B32Sint;
+            case VertexFormat.Sint32x4:     return Format.R32G32B32A32Sint;
+
+            case VertexFormat.RGB10A2Unorm: return Format.R10G10B10A2Unorm;
+
+            default:
+                return Format.Unknown;
+        }
+    }
 }

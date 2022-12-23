@@ -15,21 +15,21 @@ internal sealed unsafe class D3D11Texture : Texture
     private readonly ComPtr<ID3D11Texture2D> _handle;
     private readonly ComPtr<ID3D11ShaderResourceView> _srv = default;
 
-    public D3D11Texture(D3D11GraphicsDevice device, in Size3 size, TextureFormat format, TextureUsage usage, int sampleCount = 1)
-        : base(device)
+    public D3D11Texture(D3D11GraphicsDevice device, in TextureDescription description, void* initialData = default)
+        : base(device, description)
     {
         BindFlags bindFlags = BindFlags.None;
-        if ((usage & TextureUsage.ShaderRead) != 0)
+        if ((description.Usage & TextureUsage.ShaderRead) != 0)
         {
             bindFlags |= BindFlags.ShaderResource;
         }
-        if ((usage & TextureUsage.ShaderWrite) != 0)
+        if ((description.Usage & TextureUsage.ShaderWrite) != 0)
         {
             bindFlags |= BindFlags.UnorderedAccess;
         }
-        if ((usage & TextureUsage.RenderTarget) != 0)
+        if ((description.Usage & TextureUsage.RenderTarget) != 0)
         {
-            if (format.IsDepthStencilFormat())
+            if (description.Format.IsDepthStencilFormat())
             {
                 bindFlags |= BindFlags.DepthStencil;
             }
@@ -39,26 +39,35 @@ internal sealed unsafe class D3D11Texture : Texture
             }
         }
 
-        DxgiFormat = format.ToDxgiFormat();
+        DxgiFormat = description.Format.ToDxgiFormat();
 
         Texture2DDescription d3dDesc = new()
         {
-            Width = (uint)size.Width,
-            Height = (uint)size.Height,
-            MipLevels = 1,
-            ArraySize = 1,
+            Width = (uint)description.Width,
+            Height = (uint)description.Height,
+            MipLevels = (uint)description.MipLevels,
+            ArraySize = (uint)description.DepthOrArrayLayers,
             Format = DxgiFormat,
-            SampleDesc = new SampleDescription((uint)sampleCount, 0),
+            SampleDesc = new SampleDescription((uint)description.SampleCount, 0),
             BindFlags = bindFlags
         };
 
-        HResult hr = device.NativeDevice->CreateTexture2D(&d3dDesc, null, _handle.GetAddressOf());
+        SubresourceData* pInitialData = default;
+        SubresourceData subresourceData = default;
+        if (initialData != null)
+        {
+            subresourceData.pSysMem = initialData;
+            subresourceData.SysMemPitch = (uint)(description.Width * description.Format.BytesPerPixels());
+            pInitialData = &subresourceData;
+        }
+
+        HResult hr = device.NativeDevice->CreateTexture2D(&d3dDesc, pInitialData, _handle.GetAddressOf());
         if (hr.Failure)
         {
             throw new InvalidOperationException("D3D11: Failed to create texture");
         }
 
-        if ((usage & TextureUsage.ShaderRead) != 0)
+        if ((description.Usage & TextureUsage.ShaderRead) != 0)
         {
             ShaderResourceViewDescription srvDesc = new();
             srvDesc.Format = DxgiFormat;

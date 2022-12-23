@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Runtime.InteropServices;
 using Alimer.Bindings.SDL;
 using Alimer.Graphics;
+using Vortice.Mathematics;
 using static Alimer.Bindings.SDL.SDL;
 using static Alimer.Bindings.SDL.SDL.SDL_EventType;
 using static Alimer.Bindings.SDL.SDL.SDL_LogPriority;
@@ -22,6 +23,7 @@ public sealed class Application : IDisposable
     private bool _exitRequested;
     private ViewSettings _viewSettings;
     private readonly FrameBuffer _framebuffer;
+    private readonly FrameBuffer _resolveFramebuffer;
 
     public Application(GraphicsBackend graphicsBackend, int width = 1200, int height = 800, int maxSamples = 16)
     {
@@ -52,18 +54,38 @@ public sealed class Application : IDisposable
 
         _framebuffer = _graphicsDevice.CreateFrameBuffer(new Size(width, height),
             _graphicsDevice.Samples, TextureFormat.Rgba16Float, TextureFormat.Depth32FloatStencil8);
-        //if (_graphicsDevice.Samples > 1)
-        //{
-        //    m_resolveFramebuffer = createFrameBuffer(width, height, 1, DXGI_FORMAT_R16G16B16A16_FLOAT, (DXGI_FORMAT)0);
-        //}
-        //else
-        //{
-        //    m_resolveFramebuffer = m_framebuffer;
-        //}
+        if (_graphicsDevice.Samples > 1)
+        {
+            _resolveFramebuffer = _graphicsDevice.CreateFrameBuffer(new Size(width, height), 1, TextureFormat.Rgba16Float, TextureFormat.Invalid);
+        }
+        else
+        {
+            _resolveFramebuffer = _framebuffer;
+        }
+
+        // Load & convert equirectangular environment map to a cubemap texture.
+        {
+            using Texture envTextureEquirect = CreateTexture(FromFile("environment.hdr"));
+        }
+    }
+
+    private static Image FromFile(string fileName)
+    {
+        return Image.FromFile(Path.Combine(AppContext.BaseDirectory, "assets", "textures", fileName));
+    }
+
+    private Texture CreateTexture(Image image)
+    {
+        TextureDescription desc = TextureDescription.Texture2D(image.Format, image.Width, image.Height, 1, 1, TextureUsage.ShaderRead | TextureUsage.ShaderWrite);
+        return _graphicsDevice.CreateTexture(image.Data.Span, desc);
     }
 
     public void Dispose()
     {
+        if (_resolveFramebuffer != _framebuffer)
+        {
+            _resolveFramebuffer.Dispose();
+        }
         _framebuffer.Dispose();
 
         SDL_DestroyWindow(_window);
