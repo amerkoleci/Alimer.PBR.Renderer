@@ -8,5 +8,15 @@ public abstract class Pipeline : GraphicsResource
     protected Pipeline(GraphicsDevice device, in RenderPipelineDescription description)
         : base(device, description.Label)
     {
+        PipelineType = PipelineType.Render;
     }
+
+    protected Pipeline(GraphicsDevice device, in ComputePipelineDescription description)
+        : base(device, description.Label)
+    {
+        PipelineType = PipelineType.Compute;
+    }
+
+
+    public PipelineType PipelineType { get; }
 }

@@ -31,16 +31,25 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
     public override void SetPipeline(Pipeline pipeline)
     {
         D3D11Pipeline d3d11Pipeline = (D3D11Pipeline)pipeline;
-        if (_currentRasterizerState != d3d11Pipeline.RasterizerState)
+        if (d3d11Pipeline.PipelineType == PipelineType.Render)
         {
-            _currentRasterizerState = d3d11Pipeline.RasterizerState;
-            _context->RSSetState(_currentRasterizerState);
-        }
+            _context->CSSetShader(d3d11Pipeline.CS, null, 0);
 
-        if (_currentPrimitiveTopology != d3d11Pipeline.PrimitiveTopology)
+            if (_currentRasterizerState != d3d11Pipeline.RasterizerState)
+            {
+                _currentRasterizerState = d3d11Pipeline.RasterizerState;
+                _context->RSSetState(_currentRasterizerState);
+            }
+
+            if (_currentPrimitiveTopology != d3d11Pipeline.PrimitiveTopology)
+            {
+                _currentPrimitiveTopology = d3d11Pipeline.PrimitiveTopology;
+                _context->IASetPrimitiveTopology(d3d11Pipeline.PrimitiveTopology);
+            }
+        }
+        else if (d3d11Pipeline.PipelineType == PipelineType.Compute)
         {
-            _currentPrimitiveTopology = d3d11Pipeline.PrimitiveTopology;
-            _context->IASetPrimitiveTopology(d3d11Pipeline.PrimitiveTopology);
+            _context->CSSetShader(d3d11Pipeline.CS, null, 0);
         }
     }
 
@@ -55,6 +64,11 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
         {
             ((D3D11FrameBuffer)frameBuffer).Bind(_context);
         }
+    }
+
+    public override void Dispatch(int groupCountX, int groupCountY, int groupCountZ)
+    {
+        _context->Dispatch((uint)groupCountX, (uint)groupCountY, (uint)groupCountZ);
     }
 
     public override void Draw(int vertexCount, int instanceCount = 1, int firstVertex = 0, int firstInstance = 0)

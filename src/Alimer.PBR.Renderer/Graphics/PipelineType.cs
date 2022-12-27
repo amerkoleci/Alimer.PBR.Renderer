@@ -4,12 +4,10 @@
 namespace Alimer.Graphics;
 
 /// <summary>
-/// Defines the dimension of <see cref="Texture"/>.
+/// Defines the type of <see cref="Pipeline"/>.
 /// </summary>
-public enum TextureDimension
+public enum PipelineType
 {
-    Texture1D,
-    Texture2D,
-    TextureCube,
-    Texture3D
+    Render,
+    Compute
 }

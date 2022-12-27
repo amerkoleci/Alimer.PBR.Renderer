@@ -56,6 +56,15 @@ public abstract class GraphicsDevice : GraphicsObject
         return CreateTexture(description, ref MemoryMarshal.GetReference(initialData));
     }
 
+    public unsafe Texture CreateTexture(in TextureDescription description) 
+    {
+        Guard.IsGreaterThanOrEqualTo(description.Width, 1, nameof(TextureDescription.Width));
+        Guard.IsGreaterThanOrEqualTo(description.Height, 1, nameof(TextureDescription.Height));
+
+        return CreateTextureCore(description, default);
+    }
+
+    public abstract Pipeline CreateComputePipeline(in ComputePipelineDescription description);
     public abstract Pipeline CreateRenderPipeline(in RenderPipelineDescription description);
 
     protected abstract unsafe Texture CreateTextureCore(in TextureDescription description, void* initialData); 

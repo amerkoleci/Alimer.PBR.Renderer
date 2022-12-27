@@ -72,9 +72,24 @@ public sealed class Application : GraphicsObject
         RenderPipelineDescription skyboxPipelineDesc = new();
         _skyboxPipeline = AddDisposable(_graphicsDevice.CreateRenderPipeline(skyboxPipelineDesc));
 
+        // Unfiltered environment cube map (temporary).
+        Texture envTextureUnfiltered = CreateTextureCube(TextureFormat.Rgba16Float, 1024, 1024);
+        //createTextureUAV(envTextureUnfiltered, 0);
+
         // Load & convert equirectangular environment map to a cubemap texture.
         {
+            ComputePipelineDescription equirectToCubePipelineDesc = new()
+            {
+                ComputeShader = CompileShader("equirect2cube.hlsl", "main", "cs_5_0"),
+                Label = "EquirectToCube"
+            };
+
+            using Pipeline equirectToCubePipeline = _graphicsDevice.CreateComputePipeline(equirectToCubePipelineDesc);
             using Texture envTextureEquirect = CreateTexture(FromFile("environment.hdr"));
+
+            CommandContext context = _graphicsDevice.DefaultContext;
+            context.SetPipeline(equirectToCubePipeline);
+            context.Dispatch(envTextureUnfiltered.Width / 32, envTextureUnfiltered.Height / 32, 6);
         }
     }
 
@@ -85,12 +100,18 @@ public sealed class Application : GraphicsObject
 
     private static ReadOnlyMemory<byte> CompileShader(string fileName, string entryPoint, string profile)
     {
-        string filePath = Path.Combine(AppContext.BaseDirectory, "assets", "shaders", fileName);
+        string filePath = Path.Combine(AppContext.BaseDirectory, "assets", "shaders", "hlsl", fileName);
         string shaderSource = File.ReadAllText(filePath);
 
         return D3D11GraphicsDevice.CompileBytecode(shaderSource, entryPoint, profile);
     }
 
+
+    private Texture CreateTextureCube(TextureFormat format, int width, int height,  int levels = 0)
+    {
+        TextureDescription desc = TextureDescription.TextureCube(format, width, height, levels, TextureUsage.ShaderRead | TextureUsage.ShaderWrite);
+        return _graphicsDevice.CreateTexture(desc);
+    }
 
     private Texture CreateTexture(Image image)
     {

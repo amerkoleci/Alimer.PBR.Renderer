@@ -19,6 +19,7 @@ internal sealed unsafe class D3D11Texture : Texture
         : base(device, description)
     {
         BindFlags bindFlags = BindFlags.None;
+        ResourceMiscFlags miscFlags = ResourceMiscFlags.None;
         if ((description.Usage & TextureUsage.ShaderRead) != 0)
         {
             bindFlags |= BindFlags.ShaderResource;
@@ -39,6 +40,19 @@ internal sealed unsafe class D3D11Texture : Texture
             }
         }
 
+        int arrayMultiplier = 1;
+        if (description.Dimension == TextureDimension.TextureCube)
+        {
+            arrayMultiplier = 6;
+            miscFlags |= ResourceMiscFlags.TextureCube;
+        }
+
+        if (description.MipLevels == 0)
+        {
+            bindFlags |= BindFlags.RenderTarget;
+            miscFlags |= ResourceMiscFlags.GenerateMips;
+        }
+
         DxgiFormat = description.Format.ToDxgiFormat();
 
         Texture2DDescription d3dDesc = new()
@@ -46,10 +60,11 @@ internal sealed unsafe class D3D11Texture : Texture
             Width = (uint)description.Width,
             Height = (uint)description.Height,
             MipLevels = (uint)description.MipLevels,
-            ArraySize = (uint)description.DepthOrArrayLayers,
+            ArraySize = (uint)(description.DepthOrArrayLayers * arrayMultiplier),
             Format = DxgiFormat,
             SampleDesc = new SampleDescription((uint)description.SampleCount, 0),
-            BindFlags = bindFlags
+            BindFlags = bindFlags,
+            MiscFlags = miscFlags
         };
 
         SubresourceData* pInitialData = default;
@@ -71,9 +86,19 @@ internal sealed unsafe class D3D11Texture : Texture
         {
             ShaderResourceViewDescription srvDesc = new();
             srvDesc.Format = DxgiFormat;
-            srvDesc.ViewDimension = SrvDimension.Texture2D;
-            srvDesc.Texture2D.MostDetailedMip = 0;
-            srvDesc.Texture2D.MipLevels = 1;
+            if (description.Dimension == TextureDimension.TextureCube)
+            {
+                srvDesc.ViewDimension = SrvDimension.TextureCube;
+                srvDesc.Texture2D.MostDetailedMip = 0;
+                srvDesc.Texture2D.MipLevels = unchecked((uint)-1);
+            }
+            else
+            {
+                srvDesc.ViewDimension = SrvDimension.Texture2D;
+                srvDesc.Texture2D.MostDetailedMip = 0;
+                srvDesc.Texture2D.MipLevels = 1;
+            }
+                
 
             ThrowIfFailed(device.NativeDevice->CreateShaderResourceView(Handle, &srvDesc, _srv.GetAddressOf()));
         }

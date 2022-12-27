@@ -9,6 +9,34 @@ public abstract class CommandContext : GraphicsObject
 
     public abstract void SetRenderTarget(FrameBuffer? frameBuffer = default);
 
+    public void Dispatch1D(int threadCountX, int groupSizeX = 64)
+    {
+        Dispatch(
+            Utilities.DivideByMultiple(threadCountX, groupSizeX),
+            1,
+            1);
+    }
+
+    public void Dispatch2D(int threadCountX, int threadCountY, int groupSizeX = 8, int groupSizeY = 8)
+    {
+        Dispatch(
+            Utilities.DivideByMultiple(threadCountX, groupSizeX),
+            Utilities.DivideByMultiple(threadCountY, groupSizeX),
+            1
+        );
+    }
+
+    public void Dispatch3D(int threadCountX, int threadCountY, int threadCountZ, int groupSizeX, int groupSizeY, int groupSizeZ)
+    {
+        Dispatch(
+            Utilities.DivideByMultiple(threadCountX, groupSizeX),
+            Utilities.DivideByMultiple(threadCountY, groupSizeY),
+            Utilities.DivideByMultiple(threadCountZ, groupSizeZ)
+        );
+    }
+
+    public abstract void Dispatch(int groupCountX, int groupCountY, int groupCountZ);
+
     /// <summary>
     /// Draw non-indexed geometry.
     /// </summary>

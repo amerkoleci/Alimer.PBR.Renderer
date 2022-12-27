@@ -101,6 +101,26 @@ public readonly record struct TextureDescription
             arrayLayers,
             mipLevels,
             usage,
-            sampleCount);
+            sampleCount
+            );
+    }
+
+    public static TextureDescription TextureCube(
+        TextureFormat format,
+        int width,
+        int height,
+        int mipLevels,
+        TextureUsage usage = TextureUsage.ShaderRead)
+    {
+        return new TextureDescription(
+            TextureDimension.TextureCube,
+            format,
+            width,
+            height,
+            1,
+            mipLevels,
+            usage,
+            1
+            );
     }
 }
