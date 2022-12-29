@@ -25,7 +25,14 @@ public sealed class Application : GraphicsObject
     private ViewSettings _viewSettings;
     private readonly FrameBuffer _framebuffer;
     private readonly FrameBuffer _resolveFramebuffer;
+
+    private readonly Sampler _defaultSampler;
+    private readonly Sampler _computeSampler;
+    private readonly Sampler _spBRDF_Sampler;
+
     private readonly Pipeline _skyboxPipeline;
+
+    private readonly Pipeline _trianglePipeline;
 
     public Application(GraphicsBackend graphicsBackend, int width = 1200, int height = 800, int maxSamples = 16)
     {
@@ -69,12 +76,35 @@ public sealed class Application : GraphicsObject
             _resolveFramebuffer = _framebuffer;
         }
 
-        RenderPipelineDescription skyboxPipelineDesc = new();
-        _skyboxPipeline = AddDisposable(_graphicsDevice.CreateRenderPipeline(skyboxPipelineDesc));
+        SamplerDescription samplerDesc = new()
+        {
+            AddressModeU = SamplerAddressMode.Repeat,
+            AddressModeV = SamplerAddressMode.Repeat,
+            AddressModeW = SamplerAddressMode.Repeat,
+            MinFilter = SamplerMinMagFilter.Linear,
+            MagFilter = SamplerMinMagFilter.Linear,
+            MipFilter = SamplerMipFilter.Linear,
+            MaxAnisotropy = 16
+        };
+        _defaultSampler = AddDisposable(_graphicsDevice.CreateSampler(samplerDesc));
+
+        SamplerDescription samplerComputeSampler = new()
+        {
+            AddressModeU = SamplerAddressMode.Repeat,
+            AddressModeV = SamplerAddressMode.Repeat,
+            AddressModeW = SamplerAddressMode.Repeat,
+            MinFilter = SamplerMinMagFilter.Linear,
+            MagFilter = SamplerMinMagFilter.Linear,
+            MipFilter = SamplerMipFilter.Linear,
+            MaxAnisotropy = 1
+        };
+        _computeSampler = AddDisposable(_graphicsDevice.CreateSampler(samplerComputeSampler));
+
+        //RenderPipelineDescription skyboxPipelineDesc = new();
+        //_skyboxPipeline = AddDisposable(_graphicsDevice.CreateRenderPipeline(skyboxPipelineDesc));
 
         // Unfiltered environment cube map (temporary).
-        Texture envTextureUnfiltered = CreateTextureCube(TextureFormat.Rgba16Float, 1024, 1024);
-        //createTextureUAV(envTextureUnfiltered, 0);
+        using Texture envTextureUnfiltered = CreateTextureCube(TextureFormat.Rgba16Float, 1024, 1024);
 
         // Load & convert equirectangular environment map to a cubemap texture.
         {
@@ -88,9 +118,21 @@ public sealed class Application : GraphicsObject
             using Texture envTextureEquirect = CreateTexture(FromFile("environment.hdr"));
 
             CommandContext context = _graphicsDevice.DefaultContext;
+            context.SetSRV(0, envTextureEquirect);
+            context.SetUAV(0, envTextureUnfiltered);
+            context.SetSampler(0, _computeSampler);
+            //m_context->CSSetShaderResources(0, 1, envTextureEquirect.srv.GetAddressOf());
+            //m_context->CSSetUnorderedAccessViews(0, 1, envTextureUnfiltered.uav.GetAddressOf(), nullptr);
             context.SetPipeline(equirectToCubePipeline);
             context.Dispatch(envTextureUnfiltered.Width / 32, envTextureUnfiltered.Height / 32, 6);
         }
+
+        RenderPipelineDescription trianglePipeline = new()
+        {
+            VertexShader = CompileShader("triangle.hlsl", "main_vs", "vs_5_0"),
+            FragmentShader = CompileShader("triangle.hlsl", "main_ps", "ps_5_0")
+        };
+        _trianglePipeline = AddDisposable(_graphicsDevice.CreateRenderPipeline(trianglePipeline));
     }
 
     private static Image FromFile(string fileName)
@@ -107,7 +149,7 @@ public sealed class Application : GraphicsObject
     }
 
 
-    private Texture CreateTextureCube(TextureFormat format, int width, int height,  int levels = 0)
+    private Texture CreateTextureCube(TextureFormat format, int width, int height, int levels = 0)
     {
         TextureDescription desc = TextureDescription.TextureCube(format, width, height, levels, TextureUsage.ShaderRead | TextureUsage.ShaderWrite);
         return _graphicsDevice.CreateTexture(desc);
@@ -151,7 +193,7 @@ public sealed class Application : GraphicsObject
         context.SetRenderTarget(_framebuffer);
 
         // Draw skybox.
-        context.SetPipeline(_skyboxPipeline);
+        //context.SetPipeline(_skyboxPipeline);
 
         // Draw a full screen triangle for postprocessing/tone mapping.
         context.SetRenderTarget(null);
@@ -162,6 +204,9 @@ public sealed class Application : GraphicsObject
         //m_context->PSSetSamplers(0, 1, m_computeSampler.GetAddressOf());
         //m_context->Draw(3, 0);
 
+        // Draw triangle
+        context.SetPipeline(_trianglePipeline);
+        context.Draw(3);
 
         _graphicsDevice.EndFrame();
     }

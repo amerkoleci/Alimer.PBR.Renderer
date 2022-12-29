@@ -8,6 +8,11 @@ namespace Alimer.Graphics;
 /// </summary>
 public readonly record struct SamplerDescription
 {
+    public SamplerDescription()
+    {
+
+    }
+
     /// <summary>
     /// Gets or sets the min filter of <see cref="Sampler"/>
     /// </summary>
@@ -27,12 +32,12 @@ public readonly record struct SamplerDescription
     public SamplerAddressMode AddressModeV { get; init; }
     public SamplerAddressMode AddressModeW { get; init; }
 
-    public float LodMinClamp { get; init; }
-    public float LodMaxClamp { get; init; }
+    public float LodMinClamp { get; init; } = 0.0f;
+    public float LodMaxClamp { get; init; } = float.MaxValue;
 
-    public CompareFunction Compare { get; init; }
+    public CompareFunction Compare { get; init; } = CompareFunction.Never;
 
-    public ushort MaxAnisotropy { get; init; }
+    public ushort MaxAnisotropy { get; init; } = 1;
 
     /// <summary>
     /// Gets or sets the label of <see cref="Sampler"/>.

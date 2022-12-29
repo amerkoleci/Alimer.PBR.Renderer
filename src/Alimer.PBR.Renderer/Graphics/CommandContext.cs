@@ -9,6 +9,11 @@ public abstract class CommandContext : GraphicsObject
 
     public abstract void SetRenderTarget(FrameBuffer? frameBuffer = default);
 
+    public abstract void SetConstantBuffer(int index, GraphicsBuffer buffer);
+    public abstract void SetSampler(int index, Sampler sampler);
+    public abstract void SetSRV(int index, Texture texture);
+    public abstract void SetUAV(int index, Texture texture);
+
     public void Dispatch1D(int threadCountX, int groupSizeX = 64)
     {
         Dispatch(

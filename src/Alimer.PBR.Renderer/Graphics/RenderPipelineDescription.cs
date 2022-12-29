@@ -14,6 +14,10 @@ public readonly record struct RenderPipelineDescription
         PrimitiveTopology = PrimitiveTopology.TriangleList;
     }
 
+    public ReadOnlyMemory<byte> VertexShader { get; init; }
+
+    public ReadOnlyMemory<byte> FragmentShader { get; init; }
+
     public DepthStencilState DepthStencilState { get; init; }
 
     public PrimitiveTopology PrimitiveTopology { get; init; }

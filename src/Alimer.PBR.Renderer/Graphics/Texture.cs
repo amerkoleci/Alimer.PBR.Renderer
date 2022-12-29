@@ -8,12 +8,18 @@ public abstract class Texture : GraphicsResource
     protected Texture(GraphicsDevice device, in TextureDescription description)
         : base(device, description.Label)
     {
+        int arrayMultiplier = 1;
+        if (description.Dimension == TextureDimension.TextureCube)
+        {
+            arrayMultiplier = 6;
+        }
+
         Dimension = description.Dimension;
         Format = description.Format;
         Width = description.Width;
         Height = description.Height;
         Depth = description.Dimension == TextureDimension.Texture3D ? description.DepthOrArrayLayers : 1;
-        ArrayLayers = description.Dimension != TextureDimension.Texture3D ? description.DepthOrArrayLayers : 1;
+        ArrayLayers = description.Dimension != TextureDimension.Texture3D ? description.DepthOrArrayLayers * arrayMultiplier : 1;
         MipLevels = description.MipLevels;
         Usage = description.Usage;
         SampleCount = description.SampleCount;

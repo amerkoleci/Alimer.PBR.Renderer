@@ -20,6 +20,8 @@ using Vortice.Mathematics;
 using Win32.Graphics.Direct3D.Fxc;
 using static Win32.Graphics.Direct3D.Fxc.Apis;
 using System.Runtime.CompilerServices;
+using System.Text;
+using System.Buffers;
 
 namespace Alimer.Graphics.D3D11;
 
@@ -328,6 +330,51 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
         Span<byte> result = new byte[bytecode.Get()->GetBufferSize()];
         new Span<byte>(bytecode.Get()->GetBufferPointer(), (int)bytecode.Get()->GetBufferSize()).CopyTo(result);
         return result.ToArray();
+#if TODO
+
+        var shaderSourceUtf8 = Encoding.UTF8.GetBytes(shaderSource);
+        var entryPointUtf8 = Encoding.UTF8.GetBytes(entryPoint);
+        var profileUtf8 = Encoding.UTF8.GetBytes(profile);
+
+        using ComPtr<ID3DBlob> d3dBlobBytecode = default;
+        using ComPtr<ID3DBlob> d3dBlobErrors = default;
+
+        fixed (byte* sourcePtr = shaderSourceUtf8)
+        fixed (byte* entryPointPtr = entryPointUtf8)
+        fixed (byte* targetPtr = profileUtf8)
+        {
+            HResult hr = D3DCompile(
+                pSrcData: sourcePtr,
+                SrcDataSize: (nuint)shaderSourceUtf8.Length,
+                pSourceName: null,
+                pDefines: null,
+                pInclude: D3D_COMPILE_STANDARD_FILE_INCLUDE,
+                pEntrypoint: (sbyte*)entryPointPtr,
+                pTarget: (sbyte*)targetPtr,
+                Flags1: shaderFlags,
+                Flags2: 0u,
+                ppCode: d3dBlobBytecode.GetAddressOf(),
+                ppErrorMsgs: d3dBlobErrors.GetAddressOf()
+                );
+
+            if (hr.Failure)
+            {
+                // Throw if an error was retrieved, then also double check the HRESULT
+                if (d3dBlobErrors.Get() is not null)
+                {
+                    string message = new((sbyte*)d3dBlobErrors.Get()->GetBufferPointer());
+                }
+            }
+
+            ThrowIfFailed(hr);
+
+            Span<byte> result = new byte[d3dBlobBytecode.Get()->GetBufferSize()];
+            new Span<byte>(d3dBlobBytecode.Get()->GetBufferPointer(), (int)d3dBlobBytecode.Get()->GetBufferSize()).CopyTo(result);
+            return result.ToArray();
+        }
+
+#endif
+
     }
 
 #if DEBUG
