@@ -8,6 +8,16 @@ namespace Alimer.Graphics;
 /// </summary>
 public readonly record struct RenderPipelineDescription
 {
+    public RenderPipelineDescription()
+    {
+        DepthStencilState = new();
+        PrimitiveTopology = PrimitiveTopology.TriangleList;
+    }
+
+    public DepthStencilState DepthStencilState { get; init; }
+
+    public PrimitiveTopology PrimitiveTopology { get; init; }
+
     /// <summary>
     /// Gets or sets the label of <see cref="Pipeline"/>.
     /// </summary>

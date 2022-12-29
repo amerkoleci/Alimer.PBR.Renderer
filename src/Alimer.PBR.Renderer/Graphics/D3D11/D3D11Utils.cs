@@ -1,7 +1,10 @@
 ﻿// Copyright © Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
+using Win32.Graphics.Direct3D11;
 using Win32.Graphics.Dxgi.Common;
+using D3DPrimitiveTopology = Win32.Graphics.Direct3D.PrimitiveTopology;
+using static Win32.Graphics.Direct3D11.Apis;
 
 namespace Alimer.Graphics.D3D11;
 
@@ -95,45 +98,128 @@ internal static class D3D11Utils
     {
         switch (format)
         {
-            case VertexFormat.Uint8x2:      return Format.R8G8Uint;
-            case VertexFormat.Uint8x4:      return Format.R8G8B8A8Uint;
-            case VertexFormat.Sint8x2:      return Format.R8G8Sint;
-            case VertexFormat.Sint8x4:      return Format.R8G8B8A8Sint;
-            case VertexFormat.Unorm8x2:     return Format.R8G8Unorm;
-            case VertexFormat.Unorm8x4:     return Format.R8G8B8A8Unorm;
-            case VertexFormat.Snorm8x2:     return Format.R8G8Snorm;
-            case VertexFormat.Snorm8x4:     return Format.R8G8B8A8Snorm;
+            case VertexFormat.Uint8x2: return Format.R8G8Uint;
+            case VertexFormat.Uint8x4: return Format.R8G8B8A8Uint;
+            case VertexFormat.Sint8x2: return Format.R8G8Sint;
+            case VertexFormat.Sint8x4: return Format.R8G8B8A8Sint;
+            case VertexFormat.Unorm8x2: return Format.R8G8Unorm;
+            case VertexFormat.Unorm8x4: return Format.R8G8B8A8Unorm;
+            case VertexFormat.Snorm8x2: return Format.R8G8Snorm;
+            case VertexFormat.Snorm8x4: return Format.R8G8B8A8Snorm;
 
-            case VertexFormat.Uint16x2:     return Format.R16G16Uint;
-            case VertexFormat.Uint16x4:     return Format.R16G16B16A16Uint;
-            case VertexFormat.Sint16x2:     return Format.R16G16Sint;
-            case VertexFormat.Sint16x4:     return Format.R16G16B16A16Sint;
-            case VertexFormat.Unorm16x2:    return Format.R16G16Unorm;
-            case VertexFormat.Unorm16x4:    return Format.R16G16B16A16Unorm;
-            case VertexFormat.Snorm16x2:    return Format.R16G16Snorm;
-            case VertexFormat.Snorm16x4:    return Format.R16G16B16A16Snorm;
-            case VertexFormat.Float16x2:    return Format.R16G16Float;
-            case VertexFormat.Float16x4:    return Format.R16G16B16A16Float;
+            case VertexFormat.Uint16x2: return Format.R16G16Uint;
+            case VertexFormat.Uint16x4: return Format.R16G16B16A16Uint;
+            case VertexFormat.Sint16x2: return Format.R16G16Sint;
+            case VertexFormat.Sint16x4: return Format.R16G16B16A16Sint;
+            case VertexFormat.Unorm16x2: return Format.R16G16Unorm;
+            case VertexFormat.Unorm16x4: return Format.R16G16B16A16Unorm;
+            case VertexFormat.Snorm16x2: return Format.R16G16Snorm;
+            case VertexFormat.Snorm16x4: return Format.R16G16B16A16Snorm;
+            case VertexFormat.Float16x2: return Format.R16G16Float;
+            case VertexFormat.Float16x4: return Format.R16G16B16A16Float;
 
-            case VertexFormat.Float32:      return Format.R32Float;
-            case VertexFormat.Float32x2:    return Format.R32G32Float;
-            case VertexFormat.Float32x3:    return Format.R32G32B32Float;
-            case VertexFormat.Float32x4:    return Format.R32G32B32A32Float;
+            case VertexFormat.Float32: return Format.R32Float;
+            case VertexFormat.Float32x2: return Format.R32G32Float;
+            case VertexFormat.Float32x3: return Format.R32G32B32Float;
+            case VertexFormat.Float32x4: return Format.R32G32B32A32Float;
 
-            case VertexFormat.Uint32:       return Format.R32Uint;
-            case VertexFormat.Uint32x2:     return Format.R32G32Uint;
-            case VertexFormat.Uint32x3:     return Format.R32G32B32Uint;
-            case VertexFormat.Uint32x4:     return Format.R32G32B32A32Uint;
+            case VertexFormat.Uint32: return Format.R32Uint;
+            case VertexFormat.Uint32x2: return Format.R32G32Uint;
+            case VertexFormat.Uint32x3: return Format.R32G32B32Uint;
+            case VertexFormat.Uint32x4: return Format.R32G32B32A32Uint;
 
-            case VertexFormat.Sint32:       return Format.R32Sint;
-            case VertexFormat.Sint32x2:     return Format.R32G32Sint;
-            case VertexFormat.Sint32x3:     return Format.R32G32B32Sint;
-            case VertexFormat.Sint32x4:     return Format.R32G32B32A32Sint;
+            case VertexFormat.Sint32: return Format.R32Sint;
+            case VertexFormat.Sint32x2: return Format.R32G32Sint;
+            case VertexFormat.Sint32x3: return Format.R32G32B32Sint;
+            case VertexFormat.Sint32x4: return Format.R32G32B32A32Sint;
 
             case VertexFormat.RGB10A2Unorm: return Format.R10G10B10A2Unorm;
 
             default:
                 return Format.Unknown;
         }
+    }
+
+    public static D3DPrimitiveTopology ToD3D11(this PrimitiveTopology value)
+    {
+        switch (value)
+        {
+            case PrimitiveTopology.PointList:       return D3DPrimitiveTopology.PointList;
+            case PrimitiveTopology.LineList:        return D3DPrimitiveTopology.LineList;
+            case PrimitiveTopology.LineStrip:       return D3DPrimitiveTopology.LineStrip;
+            case PrimitiveTopology.TriangleList:    return D3DPrimitiveTopology.TriangleList;
+            case PrimitiveTopology.TriangleStrip:   return D3DPrimitiveTopology.TriangleStrip;
+
+            default:
+                return D3DPrimitiveTopology.PointList;
+        }
+    }
+
+    public static ComparisonFunction ToD3D11(this CompareFunction function)
+    {
+        switch (function)
+        {
+            case CompareFunction.Never: return ComparisonFunction.Never;
+            case CompareFunction.Less: return ComparisonFunction.Less;
+            case CompareFunction.Equal: return ComparisonFunction.Equal;
+            case CompareFunction.LessEqual: return ComparisonFunction.LessEqual;
+            case CompareFunction.Greater: return ComparisonFunction.Greater;
+            case CompareFunction.NotEqual: return ComparisonFunction.NotEqual;
+            case CompareFunction.GreaterEqual: return ComparisonFunction.GreaterEqual;
+            case CompareFunction.Always: return ComparisonFunction.Always;
+
+            default:
+                return ComparisonFunction.Never;
+        }
+    }
+
+    public static FilterType ToD3D11(this SamplerMinMagFilter filter)
+    {
+        switch (filter)
+        {
+            case SamplerMinMagFilter.Nearest: return FilterType.Point;
+            case SamplerMinMagFilter.Linear: return FilterType.Linear;
+
+            default:
+                return FilterType.Point;
+        }
+    }
+
+    public static FilterType ToD3D11(this SamplerMipFilter filter)
+    {
+        switch (filter)
+        {
+            case SamplerMipFilter.Nearest: return FilterType.Point;
+            case SamplerMipFilter.Linear: return FilterType.Linear;
+
+            default:
+                return FilterType.Point;
+        }
+    }
+
+    public static TextureAddressMode ToD3D11(this SamplerAddressMode filter)
+    {
+        switch (filter)
+        {
+            case SamplerAddressMode.Repeat:         return TextureAddressMode.Wrap;
+            case SamplerAddressMode.MirrorRepeat:   return TextureAddressMode.Mirror;
+            case SamplerAddressMode.ClampToEdge:    return TextureAddressMode.Clamp;
+
+            default:
+                return TextureAddressMode.Wrap;
+        }
+    }
+
+    public static Filter D3D11_ENCODE_BASIC_FILTER(FilterType min, FilterType mag, FilterType mip, FilterReductionType reduction)
+    {
+        return (Filter)((((uint)min & D3D11_FILTER_TYPE_MASK) << unchecked((int)D3D11_MIN_FILTER_SHIFT))
+                        | (((uint)mag & D3D11_FILTER_TYPE_MASK) << unchecked((int)D3D11_MAG_FILTER_SHIFT))
+                        | (((uint)mip & D3D11_FILTER_TYPE_MASK) << unchecked((int)D3D11_MIP_FILTER_SHIFT))
+                        | (((uint)reduction & D3D11_FILTER_TYPE_MASK) << unchecked((int)D3D11_FILTER_REDUCTION_TYPE_SHIFT)));
+    }
+
+    public static Filter D3D11_ENCODE_ANISOTROPIC_FILTER(FilterReductionType reduction)
+    {
+        return (Filter)(D3D11_ANISOTROPIC_FILTERING_BIT | (uint)D3D11_ENCODE_BASIC_FILTER(FilterType.Linear, FilterType.Linear, FilterType.Linear, reduction));
     }
 }

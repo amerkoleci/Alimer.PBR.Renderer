@@ -20,7 +20,7 @@
     <!--<PackageReference Include="Vortice.Vulkan" />-->
 
     <PackageReference Include="StbImageSharp" />
-    <PackageReference Include="Silk.NET.Assimp" />
+    <PackageReference Include="SharpGLTF.Core" />
     
   </ItemGroup>
 

@@ -284,9 +284,19 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
         _swapChain.Get()->Present(1, 0);
     }
 
-    protected override unsafe Texture CreateTextureCore(in TextureDescription description, void* initialData)
+    protected override GraphicsBuffer CreateBufferCore(in BufferDescription description, void* initialData)
+    {
+        return new D3D11Buffer(this, description, initialData);
+    }
+
+    protected override Texture CreateTextureCore(in TextureDescription description, void* initialData)
     {
         return new D3D11Texture(this, description, initialData);
+    }
+
+    protected override Sampler CreateSamplerCore(in SamplerDescription description)
+    {
+        return new D3D11Sampler(this, description);
     }
 
     public override FrameBuffer CreateFrameBuffer(in Size size, int samples, TextureFormat colorFormat, TextureFormat depthstencilFormat)
