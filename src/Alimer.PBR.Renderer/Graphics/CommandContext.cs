@@ -1,21 +1,35 @@
 ﻿// Copyright © Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
+using Vortice.Mathematics;
+
 namespace Alimer.Graphics;
 
 public abstract class CommandContext : GraphicsObject
 {
     public abstract void SetPipeline(Pipeline pipeline);
 
-    public abstract void SetRenderTarget(FrameBuffer? frameBuffer = default);
+    public abstract void SetRenderTarget(FrameBuffer? frameBuffer = default, Color4? clearColor = default, float clearDepth = 1.0f);
 
-    public abstract void SetVertexBuffer(uint slot, GraphicsBuffer buffer, uint offset = 0);
+    public abstract void SetVertexBuffer(uint slot, GraphicsBuffer buffer, uint stride, uint offset = 0);
     public abstract void SetIndexBuffer(GraphicsBuffer buffer, uint offset, IndexType indexType);
 
     public abstract void SetConstantBuffer(int index, GraphicsBuffer buffer);
     public abstract void SetSampler(int index, Sampler sampler);
     public abstract void SetSRV(int index, Texture texture);
-    public abstract void SetUAV(int index, Texture texture);
+    public abstract void SetUAV(int index, Texture texture, int mipLevel);
+
+    public unsafe void UpdateConstantBuffer<T>(GraphicsBuffer source, T data)
+        where T : unmanaged
+    {
+        UpdateConstantBuffer(source, &data, (uint)sizeof(T));
+    }
+
+    public abstract unsafe void UpdateConstantBuffer(GraphicsBuffer source, void* data, uint size);
+    public abstract void CopyTexture(Texture source, Texture destination);
+    public abstract void CopyTexture(Texture source, int sourceArraySlice, Texture destination, int destArraySlice);
+
+    public abstract void GenerateMips(Texture texture);
 
     public void Dispatch1D(int threadCountX, int groupSizeX = 64)
     {

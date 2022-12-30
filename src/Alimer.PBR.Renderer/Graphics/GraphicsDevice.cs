@@ -80,7 +80,6 @@ public abstract class GraphicsDevice : GraphicsObject
     {
         int typeSize = sizeof(T);
         Guard.IsTrue(initialData.Length > 0, nameof(initialData));
-        Guard.IsTrue((typeSize % 4) == 0);
 
         BufferDescription description = new((uint)(initialData.Length * typeSize), usage, cpuAccess, label);
         return CreateBuffer(description, ref MemoryMarshal.GetReference(initialData));

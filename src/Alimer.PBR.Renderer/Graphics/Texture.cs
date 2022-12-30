@@ -58,7 +58,7 @@ public abstract class Texture : GraphicsResource
     /// <summary>
     /// Gets the texture total number of mipmap levels.
     /// </summary>
-    public int MipLevels { get; }
+    public int MipLevels { get; protected set; }
 
     /// <summary>
     /// Gets the texture <see cref="TextureUsage"/>.

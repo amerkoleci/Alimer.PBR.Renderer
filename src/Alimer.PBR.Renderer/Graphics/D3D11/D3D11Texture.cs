@@ -14,7 +14,7 @@ internal sealed unsafe class D3D11Texture : Texture
     private readonly ComPtr<ID3D11Texture2D> _handle;
     private readonly ComPtr<ID3D11ShaderResourceView> _srv = default;
     private readonly object _uavLock = new object();
-    private readonly Dictionary<uint, ComPtr<ID3D11UnorderedAccessView>> _uavs = new();
+    private readonly Dictionary<int, ComPtr<ID3D11UnorderedAccessView>> _uavs = new();
 
     public D3D11Texture(D3D11GraphicsDevice device, in TextureDescription description, void* initialData = default)
         : base(device, description)
@@ -83,6 +83,12 @@ internal sealed unsafe class D3D11Texture : Texture
             throw new InvalidOperationException("D3D11: Failed to create texture");
         }
 
+        if (d3dDesc.MipLevels == 0)
+        {
+            _handle.Get()->GetDesc(&d3dDesc);
+            MipLevels = (int)d3dDesc.MipLevels;
+        }
+
         if ((description.Usage & TextureUsage.ShaderRead) != 0)
         {
             ShaderResourceViewDescription srvDesc = new();
@@ -111,7 +117,7 @@ internal sealed unsafe class D3D11Texture : Texture
 
         if (disposing)
         {
-            foreach (KeyValuePair<uint, ComPtr<ID3D11UnorderedAccessView>> kvp in _uavs)
+            foreach (KeyValuePair<int, ComPtr<ID3D11UnorderedAccessView>> kvp in _uavs)
             {
                 kvp.Value.Dispose();
             }
@@ -126,30 +132,33 @@ internal sealed unsafe class D3D11Texture : Texture
     public ID3D11Resource* Handle => (ID3D11Resource*)_handle.Get();
     public ID3D11ShaderResourceView* SRV => _srv;
 
-    internal ID3D11UnorderedAccessView* GetUAV(uint mipSlice)
+    internal ID3D11UnorderedAccessView* GetUAV(int mipLevel)
     {
         lock (_uavLock)
         {
-            if (!_uavs.TryGetValue(mipSlice, out ComPtr<ID3D11UnorderedAccessView> uav))
+            if (!_uavs.TryGetValue(mipLevel, out ComPtr<ID3D11UnorderedAccessView> uav))
             {
-                UnorderedAccessViewDescription uavDesc = new();
-                uavDesc.Format = DxgiFormat;
+                UnorderedAccessViewDescription uavDesc = new()
+                {
+                    Format = DxgiFormat
+                };
+
                 if (ArrayLayers == 1)
                 {
                     uavDesc.ViewDimension = UavDimension.Texture2D;
-                    uavDesc.Texture2D.MipSlice = mipSlice;
+                    uavDesc.Texture2D.MipSlice = (uint)mipLevel;
                 }
                 else
                 {
                     uavDesc.ViewDimension = UavDimension.Texture2DArray;
-                    uavDesc.Texture2DArray.MipSlice = mipSlice;
+                    uavDesc.Texture2DArray.MipSlice = (uint)mipLevel;
                     uavDesc.Texture2DArray.FirstArraySlice = 0;
                     uavDesc.Texture2DArray.ArraySize = (uint)ArrayLayers;
                 }
 
 
                 ThrowIfFailed(((D3D11GraphicsDevice)Device).NativeDevice->CreateUnorderedAccessView(Handle, &uavDesc, uav.GetAddressOf()));
-                _uavs.Add(mipSlice, uav);
+                _uavs.Add(mipLevel, uav);
             }
 
             return uav.Get();

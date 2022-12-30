@@ -8,5 +8,18 @@ public abstract class GraphicsBuffer : GraphicsResource
     protected GraphicsBuffer(GraphicsDevice device, in BufferDescription description)
         : base(device, description.Label)
     {
+        Usage = description.Usage;
+        Size = description.Size;
     }
+
+
+    /// <summary>
+    /// Gets the <see cref="BufferUsage"/>.
+    /// </summary>
+    public BufferUsage Usage { get; init; }
+
+    /// <summary>
+    /// Gets the size in bytes of the buffer.
+    /// </summary>
+    public uint Size { get; init; }
 }

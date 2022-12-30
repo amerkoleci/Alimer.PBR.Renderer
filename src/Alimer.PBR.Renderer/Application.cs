@@ -30,10 +30,16 @@ public sealed class Application : GraphicsObject
     private readonly Sampler _defaultSampler;
     private readonly Sampler _computeSampler;
     //private readonly Sampler _spBRDF_Sampler;
-    //private readonly Pipeline _skyboxPipeline;
+    private readonly Pipeline _skyboxPipeline;
+    private readonly Mesh _skybox;
+    private readonly Texture _envTexture;
 
     private readonly GraphicsBuffer _triangleVertexBuffer;
     private readonly Pipeline _trianglePipeline;
+
+    private readonly ConstantBuffer<TransformCB> _transformCB;
+
+    public Size Size { get; private set; }
 
     public Application(GraphicsBackend graphicsBackend, int width = 1200, int height = 800, int maxSamples = 16)
     {
@@ -57,6 +63,8 @@ public sealed class Application : GraphicsObject
             SDL_WINDOWPOS_CENTERED,
             SDL_WINDOWPOS_CENTERED,
             width, height, flags);
+
+        Size = new Size(width, height);
 
         _graphicsDevice = GraphicsDevice.CreateDefault(_window, maxSamples);
         _viewSettings = new(0.0f, 0.0f, 150.0f, 45.0f);
@@ -100,13 +108,27 @@ public sealed class Application : GraphicsObject
         };
         _computeSampler = AddDisposable(_graphicsDevice.CreateSampler(samplerComputeSampler));
 
-        //RenderPipelineDescription skyboxPipelineDesc = new();
-        //_skyboxPipeline = AddDisposable(_graphicsDevice.CreateRenderPipeline(skyboxPipelineDesc));
+        _transformCB = AddDisposable(new ConstantBuffer<TransformCB>(_graphicsDevice));
+
+        _skybox = AddDisposable(MeshFromFile("skybox.obj"));
+        RenderPipelineDescription skyboxPipelineDesc = new()
+        {
+            VertexShader = CompileShader("skybox.hlsl", "main_vs", "vs_5_0"),
+            FragmentShader = CompileShader("skybox.hlsl", "main_ps", "ps_5_0"),
+            VertexDescriptor = new(new VertexLayoutDescriptor(new VertexAttributeDescriptor(VertexFormat.Float32x3, 0))),
+            DepthStencil = new DepthStencilDescriptor()
+            {
+                DepthWriteEnabled = false,
+                DepthCompare = CompareFunction.Always
+            }
+        };
+        _skyboxPipeline = AddDisposable(_graphicsDevice.CreateRenderPipeline(skyboxPipelineDesc));
 
         // Unfiltered environment cube map (temporary).
         using Texture envTextureUnfiltered = CreateTextureCube(TextureFormat.Rgba16Float, 1024, 1024);
 
         // Load & convert equirectangular environment map to a cubemap texture.
+        CommandContext context = _graphicsDevice.DefaultContext;
         {
             ComputePipelineDescription equirectToCubePipelineDesc = new()
             {
@@ -117,14 +139,55 @@ public sealed class Application : GraphicsObject
             using Pipeline equirectToCubePipeline = _graphicsDevice.CreateComputePipeline(equirectToCubePipelineDesc);
             using Texture envTextureEquirect = CreateTexture(FromFile("environment.hdr"));
 
-            CommandContext context = _graphicsDevice.DefaultContext;
             context.SetSRV(0, envTextureEquirect);
-            context.SetUAV(0, envTextureUnfiltered);
+            context.SetUAV(0, envTextureUnfiltered, 0);
             context.SetSampler(0, _computeSampler);
-            //m_context->CSSetShaderResources(0, 1, envTextureEquirect.srv.GetAddressOf());
-            //m_context->CSSetUnorderedAccessViews(0, 1, envTextureUnfiltered.uav.GetAddressOf(), nullptr);
             context.SetPipeline(equirectToCubePipeline);
             context.Dispatch(envTextureUnfiltered.Width / 32, envTextureUnfiltered.Height / 32, 6);
+        }
+
+        context.GenerateMips(envTextureUnfiltered);
+
+        // Compute pre-filtered specular environment map.
+        {
+
+            ComputePipelineDescription spmapPipelineDesc = new()
+            {
+                ComputeShader = CompileShader("spmap.hlsl", "main", "cs_5_0"),
+                Label = "Spmap"
+            };
+
+            using ConstantBuffer<SpecularMapFilterSettingsCB> spmapCB = new(_graphicsDevice);
+            using Pipeline spmapPipeline = _graphicsDevice.CreateComputePipeline(spmapPipelineDesc);
+
+            _envTexture = AddDisposable(CreateTextureCube(TextureFormat.Rgba16Float, 1024, 1024));
+
+            // Copy 0th mipmap level into destination environment map.
+            for (int arraySlice = 0; arraySlice < 6; ++arraySlice)
+            {
+                context.CopyTexture(envTextureUnfiltered, arraySlice, _envTexture, arraySlice);
+            }
+
+            context.SetSRV(0, envTextureUnfiltered);
+            context.SetSampler(0, _computeSampler);
+            context.SetPipeline(spmapPipeline);
+
+            // Pre-filter rest of the mip chain.
+            float deltaRoughness = 1.0f / Math.Max(_envTexture.MipLevels - 1.0f, 1.0f);
+            for (int level = 1, size = 512; level < _envTexture.MipLevels; ++level, size /= 2)
+            {
+                int numGroups = Math.Max(1, size / 32);
+
+                // Update cbuffer
+                SpecularMapFilterSettingsCB spmapConstants = new()
+                {
+                    Roughness = level * deltaRoughness
+                };
+                spmapCB.SetData(context, spmapConstants);
+                context.SetConstantBuffer(0, spmapCB.Buffer);
+                context.SetUAV(0, _envTexture, level);
+                context.Dispatch(numGroups, numGroups, 6);
+            }
         }
 
         ReadOnlySpan<VertexPositionColor> triangleVertices = stackalloc VertexPositionColor[]
@@ -147,6 +210,11 @@ public sealed class Application : GraphicsObject
     private static Image FromFile(string fileName)
     {
         return Image.FromFile(Path.Combine(AppContext.BaseDirectory, "assets", "textures", fileName));
+    }
+
+    private Mesh MeshFromFile(string fileName)
+    {
+        return Mesh.FromFile(_graphicsDevice, Path.Combine(AppContext.BaseDirectory, "assets", "meshes", fileName));
     }
 
     private static ReadOnlyMemory<byte> CompileShader(string fileName, string entryPoint, string profile)
@@ -198,14 +266,38 @@ public sealed class Application : GraphicsObject
 
         CommandContext context = _graphicsDevice.DefaultContext;
 
+        Matrix4x4 projectionMatrix = Matrix4x4.CreatePerspectiveFieldOfView(
+            MathHelper.ToRadians(_viewSettings.FieldOfView), (float)Size.Width / Size.Height, 1.0f, 1000.0f);
+
+        Matrix4x4 viewRotationMatrix = EulerAngleXY(MathHelper.ToRadians(_viewSettings.Pitch), MathHelper.ToRadians(_viewSettings.Yaw));
+        //viewRotationMatrix = Matrix4x4.Transpose(viewRotationMatrix);
+        //Matrix4x4 sceneRotationMatrix = EulerAngleXY(MathHelper.ToRadians(scene.pitch), glm::radians(scene.yaw));
+
+        //context.UpdateConstantBuffer(spmapCB.Buffer, spmapConstants);
+        TransformCB transformData = new()
+        {
+            ViewProjectionMatrix = Matrix4x4.Multiply(viewRotationMatrix, projectionMatrix),
+            SkyProjectionMatrix = Matrix4x4.Multiply(viewRotationMatrix, projectionMatrix),
+            SceneRotationMatrix = Matrix4x4.Identity
+        };
+        _transformCB.SetData(context, transformData);
+        context.SetConstantBuffer(0, _transformCB.Buffer);
+
         // Prepare framebuffer for rendering.
         //context.SetRenderTarget(_framebuffer);
 
+        context.SetRenderTarget(null, Colors.CornflowerBlue);
+
         // Draw skybox.
-        //context.SetPipeline(_skyboxPipeline);
+        context.SetPipeline(_skyboxPipeline);
+        context.SetVertexBuffer(0, _skybox.VertexBuffer, (uint)VertexMesh.SizeInBytes, 0);
+        context.SetIndexBuffer(_skybox.IndexBuffer, 0, IndexType.Uint16);
+        context.SetSRV(0, _envTexture);
+        context.SetSampler(0, _defaultSampler);
+        context.DrawIndexed(_skybox.IndexCount, 1);
 
         // Draw a full screen triangle for postprocessing/tone mapping.
-        context.SetRenderTarget(null);
+        //context.SetRenderTarget(null);
         //m_context->IASetInputLayout(nullptr);
         //m_context->VSSetShader(m_tonemapProgram.vertexShader.Get(), nullptr, 0);
         //m_context->PSSetShader(m_tonemapProgram.pixelShader.Get(), nullptr, 0);
@@ -214,9 +306,9 @@ public sealed class Application : GraphicsObject
         //m_context->Draw(3, 0);
 
         // Draw triangle
-        context.SetVertexBuffer(0, _triangleVertexBuffer);
-        context.SetPipeline(_trianglePipeline);
-        context.Draw(3);
+        //context.SetVertexBuffer(0, _triangleVertexBuffer);
+        //context.SetPipeline(_trianglePipeline);
+        //context.Draw(3);
 
         _graphicsDevice.EndFrame();
     }
@@ -253,5 +345,36 @@ public sealed class Application : GraphicsObject
 
     private void HandleWindowEvent(in SDL_Event evt)
     {
+    }
+
+    private static Matrix4x4 EulerAngleXY(float angleX, float angleY)
+    {
+        float cosX = MathF.Cos(angleX);
+        float sinX = MathF.Sin(angleX);
+        float cosY = MathF.Cos(angleY);
+        float sinY = MathF.Sin(angleY);
+
+        return new Matrix4x4(
+            cosY, -sinX * -sinY, cosX * -sinY, 0.0f,
+            0.0f, cosX, sinX, 0.0f,
+            sinY, -sinX * cosY, cosX * cosY, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+            );
+    }
+
+
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    public struct TransformCB
+    {
+        public Matrix4x4 ViewProjectionMatrix;
+        public Matrix4x4 SkyProjectionMatrix;
+        public Matrix4x4 SceneRotationMatrix;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    public struct SpecularMapFilterSettingsCB
+    {
+        public float Roughness;
+        private readonly Vector3 _padding;
     }
 }

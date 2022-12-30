@@ -9,7 +9,7 @@ using Vortice.Mathematics;
 namespace Alimer.PBR.Renderer;
 
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
-public readonly struct VertexPositionColor
+public readonly record struct VertexPositionColor
 {
     public static readonly unsafe int SizeInBytes = sizeof(VertexPositionColor);
 

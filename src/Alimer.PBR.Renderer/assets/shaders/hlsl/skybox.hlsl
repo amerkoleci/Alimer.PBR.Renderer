@@ -20,7 +20,7 @@ TextureCube envTexture : register(t0);
 SamplerState defaultSampler : register(s0);
 
 // Vertex shader
-PixelShaderInput main_vs(float3 position : POSITION)
+PixelShaderInput main_vs(float3 position : ATTRIBUTE0)
 {
 	PixelShaderInput vout;
 	vout.localPosition = position;

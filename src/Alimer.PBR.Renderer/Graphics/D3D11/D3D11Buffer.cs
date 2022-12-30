@@ -17,15 +17,16 @@ internal sealed unsafe class D3D11Buffer : GraphicsBuffer
     {
         uint size = (uint)description.Size;
         BindFlags bindFlags = BindFlags.None;
-        Usage usage = Usage.Default;
+        Usage usage = Win32.Graphics.Direct3D11.Usage.Default;
         CpuAccessFlags cpuAccessFlags = CpuAccessFlags.None;
 
         if ((description.Usage & BufferUsage.Constant) != BufferUsage.None)
         {
             size = MathHelper.AlignUp(size, 64u);
             bindFlags = BindFlags.ConstantBuffer;
-            usage = Usage.Dynamic;
+            usage = Win32.Graphics.Direct3D11.Usage.Dynamic;
             cpuAccessFlags = CpuAccessFlags.Write;
+            IsDynamic = true;
         }
         else
         {
@@ -59,6 +60,7 @@ internal sealed unsafe class D3D11Buffer : GraphicsBuffer
     }
 
     public ID3D11Buffer* Handle => _handle.Get();
+    public bool IsDynamic { get; }
 
     protected override void Dispose(bool disposing)
     {
