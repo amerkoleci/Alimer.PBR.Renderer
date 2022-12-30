@@ -11,7 +11,7 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <VorticeWin32Version>1.9.6</VorticeWin32Version>
+    <VorticeWin32Version>1.9.8</VorticeWin32Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,7 +23,7 @@
     <PackageVersion Include="Vortice.Win32.Graphics.Direct3D12" Version="$(VorticeWin32Version)" />
     <PackageVersion Include="Vortice.Win32.Graphics.Direct3D.Dxc" Version="$(VorticeWin32Version)" />
     <PackageVersion Include="Vortice.Win32.Graphics.Direct3D.Fxc" Version="$(VorticeWin32Version)" />
-    <PackageVersion Include="Vortice.Vulkan" Version="1.5.26" />
+    <PackageVersion Include="Vortice.Vulkan" Version="1.5.27" />
 
     <PackageVersion Include="StbImageSharp" Version="2.27.13" />
     <PackageVersion Include="SharpGLTF.Core" Version="1.0.0-alpha0027" />

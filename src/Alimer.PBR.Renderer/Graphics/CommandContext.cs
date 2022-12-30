@@ -9,6 +9,9 @@ public abstract class CommandContext : GraphicsObject
 
     public abstract void SetRenderTarget(FrameBuffer? frameBuffer = default);
 
+    public abstract void SetVertexBuffer(uint slot, GraphicsBuffer buffer, uint offset = 0);
+    public abstract void SetIndexBuffer(GraphicsBuffer buffer, uint offset, IndexType indexType);
+
     public abstract void SetConstantBuffer(int index, GraphicsBuffer buffer);
     public abstract void SetSampler(int index, Sampler sampler);
     public abstract void SetSRV(int index, Texture texture);

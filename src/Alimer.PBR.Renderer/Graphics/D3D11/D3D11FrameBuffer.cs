@@ -17,7 +17,7 @@ internal sealed unsafe class D3D11FrameBuffer : FrameBuffer
     private readonly ComPtr<ID3D11DepthStencilView> _dsv = default;
 
     public D3D11FrameBuffer(D3D11GraphicsDevice device, Size size, int sampleCount, TextureFormat colorFormat, TextureFormat depthStencilFormat)
-        : base(device)
+        : base(device, size)
     {
         if (colorFormat != TextureFormat.Invalid)
         {

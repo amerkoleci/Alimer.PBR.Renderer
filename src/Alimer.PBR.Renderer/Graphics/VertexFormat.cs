@@ -5,7 +5,7 @@ namespace Alimer.Graphics;
 
 public enum VertexFormat
 {
-    Invalid = 0,
+    Undefined = 0,
     Uint8x2,
     Uint8x4,
     Sint8x2,

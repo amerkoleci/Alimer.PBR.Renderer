@@ -4,7 +4,7 @@
 using Win32;
 using Win32.Graphics.Direct3D11;
 using D3D11SamplerDesc = Win32.Graphics.Direct3D11.SamplerDescription;
-using static Alimer.Graphics.D3D11.D3D11Utils;
+using static Win32.Graphics.Direct3D11.Apis;
 
 namespace Alimer.Graphics.D3D11;
 
@@ -27,11 +27,11 @@ internal sealed unsafe class D3D11Sampler : Sampler
         d3dDesc.MaxAnisotropy = Math.Min(Math.Max(description.MaxAnisotropy, 1u), 16u);
         if (d3dDesc.MaxAnisotropy > 1)
         {
-            d3dDesc.Filter = D3D11_ENCODE_ANISOTROPIC_FILTER(reduction);
+            d3dDesc.Filter = EncodeAnisotropicFilter(reduction);
         }
         else
         {
-            d3dDesc.Filter = D3D11_ENCODE_BASIC_FILTER(minFilter, magFilter, mipmapFilter, reduction);
+            d3dDesc.Filter = EncodeBasicFilter(minFilter, magFilter, mipmapFilter, reduction);
         }
 
         d3dDesc.AddressU = description.AddressModeU.ToD3D11();

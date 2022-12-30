@@ -1,27 +1,23 @@
 ﻿// Copyright © Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
+using System.Drawing;
+using Alimer.Bindings.SDL;
+using CommunityToolkit.Diagnostics;
 using Win32;
 using Win32.Graphics.Direct3D;
+using Win32.Graphics.Direct3D.Fxc;
 using Win32.Graphics.Direct3D11;
 using Win32.Graphics.Dxgi;
 using Win32.Graphics.Dxgi.Common;
 using static Alimer.Bindings.SDL.SDL;
 using static Alimer.Bindings.SDL.SDL.SDL_WindowFlags;
 using static Win32.Apis;
+using static Win32.Graphics.Direct3D.Fxc.Apis;
 using static Win32.Graphics.Direct3D11.Apis;
 using static Win32.Graphics.Dxgi.Apis;
 using InfoQueueFilter = Win32.Graphics.Direct3D11.InfoQueueFilter;
 using MessageId = Win32.Graphics.Direct3D11.MessageId;
-using Alimer.Bindings.SDL;
-using CommunityToolkit.Diagnostics;
-using System.Drawing;
-using Vortice.Mathematics;
-using Win32.Graphics.Direct3D.Fxc;
-using static Win32.Graphics.Direct3D.Fxc.Apis;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Buffers;
 
 namespace Alimer.Graphics.D3D11;
 

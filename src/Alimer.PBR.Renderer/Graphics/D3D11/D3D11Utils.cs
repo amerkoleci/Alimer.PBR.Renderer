@@ -3,8 +3,8 @@
 
 using Win32.Graphics.Direct3D11;
 using Win32.Graphics.Dxgi.Common;
+using D3D11StencilOperation = Win32.Graphics.Direct3D11.StencilOperation;
 using D3DPrimitiveTopology = Win32.Graphics.Direct3D.PrimitiveTopology;
-using static Win32.Graphics.Direct3D11.Apis;
 
 namespace Alimer.Graphics.D3D11;
 
@@ -140,15 +140,27 @@ internal static class D3D11Utils
         }
     }
 
+    public static Format ToDxgiFormat(this IndexType indexType)
+    {
+        switch (indexType)
+        {
+            case IndexType.Uint16: return Format.R16Uint;
+            case IndexType.Uint32: return Format.R32Uint;
+           
+            default:
+                return Format.R16Uint;
+        }
+    }
+
     public static D3DPrimitiveTopology ToD3D11(this PrimitiveTopology value)
     {
         switch (value)
         {
-            case PrimitiveTopology.PointList:       return D3DPrimitiveTopology.PointList;
-            case PrimitiveTopology.LineList:        return D3DPrimitiveTopology.LineList;
-            case PrimitiveTopology.LineStrip:       return D3DPrimitiveTopology.LineStrip;
-            case PrimitiveTopology.TriangleList:    return D3DPrimitiveTopology.TriangleList;
-            case PrimitiveTopology.TriangleStrip:   return D3DPrimitiveTopology.TriangleStrip;
+            case PrimitiveTopology.PointList: return D3DPrimitiveTopology.PointList;
+            case PrimitiveTopology.LineList: return D3DPrimitiveTopology.LineList;
+            case PrimitiveTopology.LineStrip: return D3DPrimitiveTopology.LineStrip;
+            case PrimitiveTopology.TriangleList: return D3DPrimitiveTopology.TriangleList;
+            case PrimitiveTopology.TriangleStrip: return D3DPrimitiveTopology.TriangleStrip;
 
             default:
                 return D3DPrimitiveTopology.PointList;
@@ -201,25 +213,35 @@ internal static class D3D11Utils
     {
         switch (filter)
         {
-            case SamplerAddressMode.Repeat:         return TextureAddressMode.Wrap;
-            case SamplerAddressMode.MirrorRepeat:   return TextureAddressMode.Mirror;
-            case SamplerAddressMode.ClampToEdge:    return TextureAddressMode.Clamp;
+            case SamplerAddressMode.Repeat: return TextureAddressMode.Wrap;
+            case SamplerAddressMode.MirrorRepeat: return TextureAddressMode.Mirror;
+            case SamplerAddressMode.ClampToEdge: return TextureAddressMode.Clamp;
 
             default:
                 return TextureAddressMode.Wrap;
         }
     }
 
-    public static Filter D3D11_ENCODE_BASIC_FILTER(FilterType min, FilterType mag, FilterType mip, FilterReductionType reduction)
-    {
-        return (Filter)((((uint)min & D3D11_FILTER_TYPE_MASK) << unchecked((int)D3D11_MIN_FILTER_SHIFT))
-                        | (((uint)mag & D3D11_FILTER_TYPE_MASK) << unchecked((int)D3D11_MAG_FILTER_SHIFT))
-                        | (((uint)mip & D3D11_FILTER_TYPE_MASK) << unchecked((int)D3D11_MIP_FILTER_SHIFT))
-                        | (((uint)reduction & D3D11_FILTER_TYPE_MASK) << unchecked((int)D3D11_FILTER_REDUCTION_TYPE_SHIFT)));
-    }
+    private static readonly D3D11StencilOperation[] s_stencilOperationMap = new D3D11StencilOperation[(int)StencilOperation.Count] {
+        D3D11StencilOperation.Keep,
+        D3D11StencilOperation.Zero,
+        D3D11StencilOperation.Replace,
+        D3D11StencilOperation.IncrementSaturate,
+        D3D11StencilOperation.DecrementSaturate,
+        D3D11StencilOperation.Invert,
+        D3D11StencilOperation.Increment,
+        D3D11StencilOperation.Decrement,
+    };
 
-    public static Filter D3D11_ENCODE_ANISOTROPIC_FILTER(FilterReductionType reduction)
+    public static D3D11StencilOperation ToD3D11(this StencilOperation operation) => s_stencilOperationMap[(uint)operation];
+
+    public static DepthStencilOperationDescription ToD3D11(this StencilDescriptor state)
     {
-        return (Filter)(D3D11_ANISOTROPIC_FILTERING_BIT | (uint)D3D11_ENCODE_BASIC_FILTER(FilterType.Linear, FilterType.Linear, FilterType.Linear, reduction));
+        return new DepthStencilOperationDescription(
+            state.StencilFailureOperation.ToD3D11(),
+            state.DepthFailureOperation.ToD3D11(),
+            state.DepthStencilPassOperation.ToD3D11(),
+            state.StencilCompareFunction.ToD3D11()
+            );
     }
 }

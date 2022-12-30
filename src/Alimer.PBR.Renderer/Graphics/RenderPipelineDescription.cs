@@ -10,7 +10,7 @@ public readonly record struct RenderPipelineDescription
 {
     public RenderPipelineDescription()
     {
-        DepthStencilState = new();
+        DepthStencil = new();
         PrimitiveTopology = PrimitiveTopology.TriangleList;
     }
 
@@ -18,7 +18,9 @@ public readonly record struct RenderPipelineDescription
 
     public ReadOnlyMemory<byte> FragmentShader { get; init; }
 
-    public DepthStencilState DepthStencilState { get; init; }
+    public VertexDescriptor VertexDescriptor { get; init; }
+
+    public DepthStencilDescriptor DepthStencil { get; init; }
 
     public PrimitiveTopology PrimitiveTopology { get; init; }
 

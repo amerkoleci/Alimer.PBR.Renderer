@@ -2,6 +2,7 @@
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using System.Drawing;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using Alimer.Bindings.SDL;
 using Alimer.Graphics;
@@ -28,15 +29,15 @@ public sealed class Application : GraphicsObject
 
     private readonly Sampler _defaultSampler;
     private readonly Sampler _computeSampler;
-    private readonly Sampler _spBRDF_Sampler;
+    //private readonly Sampler _spBRDF_Sampler;
+    //private readonly Pipeline _skyboxPipeline;
 
-    private readonly Pipeline _skyboxPipeline;
-
+    private readonly GraphicsBuffer _triangleVertexBuffer;
     private readonly Pipeline _trianglePipeline;
 
     public Application(GraphicsBackend graphicsBackend, int width = 1200, int height = 800, int maxSamples = 16)
     {
-        //SDL_GetVersion(out SDL_version version);
+        SDL_GetVersion(out SDL_version version);
         //Log.Info($"SDL v{version.major}.{version.minor}.{version.patch}");
 
         // DPI aware on Windows
@@ -49,7 +50,6 @@ public sealed class Application : GraphicsObject
             var error = SDL_GetError();
             throw new Exception($"Failed to start SDL2: {error}");
         }
-
 
         SDL_WindowFlags flags = SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE;
 
@@ -127,10 +127,19 @@ public sealed class Application : GraphicsObject
             context.Dispatch(envTextureUnfiltered.Width / 32, envTextureUnfiltered.Height / 32, 6);
         }
 
+        ReadOnlySpan<VertexPositionColor> triangleVertices = stackalloc VertexPositionColor[]
+        {
+            new VertexPositionColor(new Vector3(0.0f, 0.5f, 0.5f), Colors.Red),
+            new VertexPositionColor(new Vector3(0.5f, -0.5f, 0.5f), Colors.Lime),
+            new VertexPositionColor(new Vector3(-0.5f, -0.5f, 0.5f), Colors.Blue)
+        };
+        _triangleVertexBuffer = AddDisposable(_graphicsDevice.CreateBuffer(triangleVertices, BufferUsage.Vertex));
+
         RenderPipelineDescription trianglePipeline = new()
         {
             VertexShader = CompileShader("triangle.hlsl", "main_vs", "vs_5_0"),
-            FragmentShader = CompileShader("triangle.hlsl", "main_ps", "ps_5_0")
+            FragmentShader = CompileShader("triangle.hlsl", "main_ps", "ps_5_0"),
+            VertexDescriptor = new(new VertexLayoutDescriptor(VertexPositionColor.Attributes)),
         };
         _trianglePipeline = AddDisposable(_graphicsDevice.CreateRenderPipeline(trianglePipeline));
     }
@@ -190,7 +199,7 @@ public sealed class Application : GraphicsObject
         CommandContext context = _graphicsDevice.DefaultContext;
 
         // Prepare framebuffer for rendering.
-        context.SetRenderTarget(_framebuffer);
+        //context.SetRenderTarget(_framebuffer);
 
         // Draw skybox.
         //context.SetPipeline(_skyboxPipeline);
@@ -205,6 +214,7 @@ public sealed class Application : GraphicsObject
         //m_context->Draw(3, 0);
 
         // Draw triangle
+        context.SetVertexBuffer(0, _triangleVertexBuffer);
         context.SetPipeline(_trianglePipeline);
         context.Draw(3);
 

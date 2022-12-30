@@ -1,6 +1,7 @@
 ﻿// Copyright © Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
+using Vortice.Mathematics;
 using Win32.Graphics.Direct3D11;
 using D3DPrimitiveTopology = Win32.Graphics.Direct3D.PrimitiveTopology;
 
@@ -10,6 +11,7 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
 {
     private readonly D3D11GraphicsDevice _device;
     private readonly ID3D11DeviceContext1* _context;
+    private ID3D11DepthStencilState* _currentDepthStencilState;
     private ID3D11RasterizerState* _currentRasterizerState;
     private D3DPrimitiveTopology _currentPrimitiveTopology;
     private readonly GraphicsBuffer[] _constantBuffers = new GraphicsBuffer[4];
@@ -40,11 +42,18 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
         D3D11Pipeline d3d11Pipeline = (D3D11Pipeline)pipeline;
         if (d3d11Pipeline.PipelineType == PipelineType.Render)
         {
-            _context->CSSetShader(d3d11Pipeline.CS, null, 0);
+            _context->CSSetShader(null);
             //_context->CSSetUnorderedAccessViews(0, _numUAVBindings, null, null);
 
-            _context->VSSetShader(d3d11Pipeline.VS, null, 0);
-            _context->PSSetShader(d3d11Pipeline.PS, null, 0);
+            _context->VSSetShader(d3d11Pipeline.VS);
+            _context->PSSetShader(d3d11Pipeline.PS);
+            _context->IASetInputLayout(d3d11Pipeline.InputLayout);
+
+            if (_currentDepthStencilState != d3d11Pipeline.DepthStencilState)
+            {
+                _currentDepthStencilState = d3d11Pipeline.DepthStencilState;
+                _context->OMSetDepthStencilState(_currentDepthStencilState, 0);
+            }
 
             if (_currentRasterizerState != d3d11Pipeline.RasterizerState)
             {
@@ -66,15 +75,43 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
 
     public override void SetRenderTarget(FrameBuffer? frameBuffer = null)
     {
+        Viewport viewport = default;
+        Win32.RawRect scissorRect = default;
+
         if (frameBuffer is null)
         {
+            viewport = new((float)_device.Size.Width, (float)_device.Size.Height);
+            scissorRect = new(0, 0, _device.Size.Width, _device.Size.Height);
+
+            Color4 clearColor = Colors.CornflowerBlue;
+
             ID3D11RenderTargetView* rtv = _device.BackBufferRTV;
             _context->OMSetRenderTargets(1, &rtv, null);
+            _context->ClearRenderTargetView(rtv, (float*)&clearColor);
         }
         else
         {
+            viewport = new((float)frameBuffer.Size.Width, (float)frameBuffer.Size.Height);
+            scissorRect = new(0, 0, frameBuffer.Size.Width, frameBuffer.Size.Height);
+
             ((D3D11FrameBuffer)frameBuffer).Bind(_context);
         }
+
+        _context->RSSetViewports(1, (Win32.Numerics.Viewport*)&viewport);
+        _context->RSSetScissorRects(1, &scissorRect);
+    }
+
+    public override void SetVertexBuffer(uint slot, GraphicsBuffer buffer, uint offset = 0)
+    {
+        var d3dBuffer = ((D3D11Buffer)buffer).Handle;
+        uint stride = 28;
+        _context->IASetVertexBuffers(0, 1u, &d3dBuffer, &stride, &offset);
+    }
+
+    public override void SetIndexBuffer(GraphicsBuffer buffer, uint offset, IndexType indexType)
+    {
+        var d3dBuffer = ((D3D11Buffer)buffer).Handle;
+        _context->IASetIndexBuffer(d3dBuffer, indexType.ToDxgiFormat(), offset);
     }
 
     public override void SetConstantBuffer(int index, GraphicsBuffer buffer)
