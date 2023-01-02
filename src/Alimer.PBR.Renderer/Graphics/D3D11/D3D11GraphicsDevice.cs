@@ -263,7 +263,7 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
 
         Size = new Size((int)swapChainDesc.Width, (int)swapChainDesc.Height);
 
-        TextureDescription colorTextureDesc = TextureDescription.Texture2D(ColorFormat, Size.Width, Size.Height, 1, 1, TextureUsage.RenderTarget);
+        TextureDescription colorTextureDesc = TextureDescription.Texture2D(ColorFormat, Size.Width, Size.Height, 1, TextureUsage.RenderTarget);
 
         ID3D11Texture2D* d3dHandle = default;
         ThrowIfFailed(

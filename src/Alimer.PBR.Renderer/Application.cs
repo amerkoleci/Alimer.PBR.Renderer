@@ -23,6 +23,10 @@ public sealed class Application : GraphicsObject
     private readonly SDL_Window _window;
     private bool _exitRequested;
     private ViewSettings _viewSettings;
+    private float _scenePitch = 0.0f;
+    private float _sceneYaw = 0.0f;
+    private const int _numLights = 3;
+    private readonly Light[] _lights = new Light[_numLights];
 
     private readonly Texture _fboColorTexture;
     private readonly Texture _fboDepthStencilTexture;
@@ -30,12 +34,23 @@ public sealed class Application : GraphicsObject
 
     private readonly Sampler _defaultSampler;
     private readonly Sampler _computeSampler;
-    //private readonly Sampler _spBRDF_Sampler;
+    private readonly Texture _spBRDF_LUT;
+    private readonly Sampler _spBRDF_Sampler;
+
+    private readonly Pipeline _pbrPipeline;
     private readonly Pipeline _skyboxPipeline;
+    private readonly Pipeline _tonemapPipeline;
+
+    private readonly Mesh _pbrMesh;
+    private readonly Texture _albedoTexture;
+    private readonly Texture _normalTexture;
+    private readonly Texture _metalnessTexture;
+    private readonly Texture _roughnessTexture;
+
     private readonly Mesh _skybox;
     private readonly Texture _envTexture;
+    private readonly Texture _irmapTexture;
 
-    private readonly Pipeline _tonemapPipeline;
 
     private readonly ConstantBuffer<TransformCB> _transformCB;
 
@@ -69,21 +84,30 @@ public sealed class Application : GraphicsObject
         _graphicsDevice = GraphicsDevice.CreateDefault(_window, maxSamples);
         _viewSettings = new(0.0f, 0.0f, 150.0f, 45.0f);
 
+        _lights[0].Direction = Vector3.Normalize(new Vector3(-1.0f, 0.0f, 0.0f));
+        _lights[0].Radiance = Vector3.One;
+
+        _lights[1].Direction = Vector3.Normalize(new Vector3(1.0f, 0.0f, 0.0f));
+        _lights[1].Radiance = Vector3.One;
+
+        _lights[2].Direction = Vector3.Normalize(new Vector3(0.0f, -1.0f, 0.0f));
+        _lights[2].Radiance = Vector3.One;
+
         TextureUsage colorTextureUsage = TextureUsage.RenderTarget;
         if (_graphicsDevice.Samples <= 1)
         {
             colorTextureUsage |= TextureUsage.ShaderRead;
         }
 
-        TextureDescription colorTextureDesc = TextureDescription.Texture2D(TextureFormat.Rgba16Float, width, height, 1, 1, colorTextureUsage, _graphicsDevice.Samples);
-        TextureDescription depthStencilTextureDesc = TextureDescription.Texture2D(TextureFormat.Depth32FloatStencil8, width, height, 1, 1, TextureUsage.RenderTarget, _graphicsDevice.Samples);
+        TextureDescription colorTextureDesc = TextureDescription.Texture2D(TextureFormat.Rgba16Float, width, height, 1, colorTextureUsage, _graphicsDevice.Samples);
+        TextureDescription depthStencilTextureDesc = TextureDescription.Texture2D(TextureFormat.Depth32FloatStencil8, width, height, 1, TextureUsage.RenderTarget, _graphicsDevice.Samples);
 
         _fboColorTexture = AddDisposable(_graphicsDevice.CreateTexture(colorTextureDesc));
         _fboDepthStencilTexture = AddDisposable(_graphicsDevice.CreateTexture(depthStencilTextureDesc));
 
         if (_graphicsDevice.Samples > 1)
         {
-            TextureDescription resolveColorTextureDesc = TextureDescription.Texture2D(TextureFormat.Rgba16Float, width, height, 1, 1,
+            TextureDescription resolveColorTextureDesc = TextureDescription.Texture2D(TextureFormat.Rgba16Float, width, height, 1,
                 TextureUsage.ShaderRead | TextureUsage.RenderTarget, 1);
             _fboResolveColorTexture = AddDisposable(_graphicsDevice.CreateTexture(resolveColorTextureDesc));
         }
@@ -120,6 +144,20 @@ public sealed class Application : GraphicsObject
 
         _transformCB = AddDisposable(new ConstantBuffer<TransformCB>(_graphicsDevice, "Transform"));
 
+        _pbrMesh = AddDisposable(MeshFromFile("cerberus.fbx"));
+        _albedoTexture = AddDisposable(CreateTexture(ImageFromFile("cerberus_A.png"), TextureFormat.Rgba8UnormSrgb));
+        _normalTexture = AddDisposable(CreateTexture(ImageFromFile("cerberus_N.png"), TextureFormat.Rgba8Unorm));
+        _metalnessTexture = AddDisposable(CreateTexture(ImageFromFile("cerberus_M.png", 1), TextureFormat.R8Unorm));
+        _roughnessTexture = AddDisposable(CreateTexture(ImageFromFile("cerberus_R.png", 1), TextureFormat.R8Unorm));
+
+        RenderPipelineDescription pbrPipelineDesc = new()
+        {
+            VertexShader = CompileShader("pbr.hlsl", "main_vs", "vs_5_0"),
+            FragmentShader = CompileShader("pbr.hlsl", "main_ps", "ps_5_0"),
+            VertexDescriptor = new(new VertexLayoutDescriptor((uint)VertexMesh.SizeInBytes, VertexMesh.Attributes))
+        };
+        _pbrPipeline = AddDisposable(_graphicsDevice.CreateRenderPipeline(pbrPipelineDesc));
+
         _skybox = AddDisposable(MeshFromFile("skybox.obj"));
         RenderPipelineDescription skyboxPipelineDesc = new()
         {
@@ -155,7 +193,7 @@ public sealed class Application : GraphicsObject
             };
 
             using Pipeline equirectToCubePipeline = _graphicsDevice.CreateComputePipeline(equirectToCubePipelineDesc);
-            using Texture envTextureEquirect = CreateTexture(FromFile("environment.hdr"));
+            using Texture envTextureEquirect = CreateTexture(ImageFromFile("environment.hdr"));
 
             context.SetSRV(0, envTextureEquirect);
             context.SetUAV(0, envTextureUnfiltered, 0);
@@ -168,11 +206,10 @@ public sealed class Application : GraphicsObject
 
         // Compute pre-filtered specular environment map.
         {
-
             ComputePipelineDescription spmapPipelineDesc = new()
             {
-                ComputeShader = CompileShader("spmap.hlsl", "main", "cs_5_0"),
-                Label = "Spmap"
+                Label = "Spmap",
+                ComputeShader = CompileShader("spmap.hlsl", "main", "cs_5_0")
             };
 
             using ConstantBuffer<SpecularMapFilterSettingsCB> spmapCB = new(_graphicsDevice);
@@ -207,11 +244,62 @@ public sealed class Application : GraphicsObject
                 context.Dispatch(numGroups, numGroups, 6);
             }
         }
+
+        // Compute diffuse irradiance cubemap.
+        {
+            ComputePipelineDescription irmapPipelineDesc = new()
+            {
+                Label = "Irmap",
+                ComputeShader = CompileShader("irmap.hlsl", "main", "cs_5_0")
+            };
+
+            using Pipeline irmapPipeline = _graphicsDevice.CreateComputePipeline(irmapPipelineDesc);
+
+            _irmapTexture = AddDisposable(CreateTextureCube(TextureFormat.Rgba16Float, 32, 32, 1));
+
+            context.SetSRV(0, _envTexture);
+            context.SetSampler(0, _computeSampler);
+            context.SetUAV(0, _irmapTexture, 0);
+            context.SetPipeline(irmapPipeline);
+            context.Dispatch(_irmapTexture.Width / 32, _irmapTexture.Height / 32, 6);
+        }
+
+        // Compute Cook-Torrance BRDF 2D LUT for split-sum approximation.
+        {
+            ComputePipelineDescription spBRDFPipelineDesc = new()
+            {
+                Label = "spBRDF",
+                ComputeShader = CompileShader("spbrdf.hlsl", "main", "cs_5_0")
+            };
+
+            using Pipeline spBRDFPipeline = _graphicsDevice.CreateComputePipeline(spBRDFPipelineDesc);
+
+            TextureDescription BRDFTexturDesc = TextureDescription.Texture2D(TextureFormat.Rg16Float, 256, 256, 1, TextureUsage.ShaderReadWrite);
+            _spBRDF_LUT = AddDisposable(_graphicsDevice.CreateTexture(BRDFTexturDesc));
+
+            SamplerDescription BRDFSamplerDesc = new()
+            {
+                Label = "Default Sampler",
+                AddressModeU = SamplerAddressMode.ClampToEdge,
+                AddressModeV = SamplerAddressMode.ClampToEdge,
+                AddressModeW = SamplerAddressMode.ClampToEdge,
+                MinFilter = SamplerMinMagFilter.Linear,
+                MagFilter = SamplerMinMagFilter.Linear,
+                MipFilter = SamplerMipFilter.Linear,
+                MaxAnisotropy = 1
+            };
+            _spBRDF_Sampler = AddDisposable(_graphicsDevice.CreateSampler(BRDFSamplerDesc));
+            //createTextureUAV(m_spBRDF_LUT, 0);
+
+            context.SetPipeline(spBRDFPipeline);
+            context.SetUAV(0, _spBRDF_LUT, 0);
+            context.Dispatch(_spBRDF_LUT.Width / 32, _spBRDF_LUT.Height / 32, 1);
+        }
     }
 
-    private static Image FromFile(string fileName)
+    private static Image ImageFromFile(string fileName, int channels = 4)
     {
-        return Image.FromFile(Path.Combine(AppContext.BaseDirectory, "assets", "textures", fileName));
+        return Image.FromFile(Path.Combine(AppContext.BaseDirectory, "assets", "textures", fileName), channels);
     }
 
     private Mesh MeshFromFile(string fileName)
@@ -234,9 +322,14 @@ public sealed class Application : GraphicsObject
         return _graphicsDevice.CreateTexture(desc);
     }
 
-    private Texture CreateTexture(Image image)
+    private Texture CreateTexture(Image image, TextureFormat format = TextureFormat.Invalid)
     {
-        TextureDescription desc = TextureDescription.Texture2D(image.Format, image.Width, image.Height, 1, 1, TextureUsage.ShaderRead | TextureUsage.ShaderWrite);
+        if (format == TextureFormat.Invalid)
+        {
+            format = image.Format;
+        }
+
+        TextureDescription desc = TextureDescription.Texture2D(format, image.Width, image.Height, 1, TextureUsage.ShaderRead | TextureUsage.ShaderWrite);
         return _graphicsDevice.CreateTexture(image.Data.Span, desc);
     }
 
@@ -268,6 +361,7 @@ public sealed class Application : GraphicsObject
 
         CommandContext context = _graphicsDevice.DefaultContext;
 
+        // Matrix4x4 projectionMatrix = Matrix4x4.CreatePerspectiveFieldOfView(MathHelper.ToRadians(_viewSettings.FieldOfView), (float)Size.Width / Size.Height, 1.0f, 1000.0f);
         Matrix4x4 projectionMatrix = perspectiveFovRH_NO(_viewSettings.FieldOfView, (float)Size.Width, Size.Height, 1.0f, 1000.0f);
 
         Matrix4x4 viewRotationMatrix = EulerAngleXY(MathHelper.ToRadians(_viewSettings.Pitch), MathHelper.ToRadians(_viewSettings.Yaw));
@@ -278,7 +372,7 @@ public sealed class Application : GraphicsObject
         TransformCB transformData = new()
         {
             ViewProjectionMatrix = Matrix4x4.Multiply(viewRotationMatrix, projectionMatrix),
-            SkyProjectionMatrix = Matrix4x4.Transpose(Matrix4x4.Multiply(viewRotationMatrix, projectionMatrix)),
+            SkyProjectionMatrix = Matrix4x4.Multiply(viewRotationMatrix, projectionMatrix),
             SceneRotationMatrix = Matrix4x4.Identity
         };
         _transformCB.SetData(context, transformData);
@@ -300,10 +394,27 @@ public sealed class Application : GraphicsObject
             // Draw skybox.
             context.SetPipeline(_skyboxPipeline);
             context.SetVertexBuffer(0, _skybox.VertexBuffer);
-            context.SetIndexBuffer(_skybox.IndexBuffer, 0, IndexType.Uint16);
+            context.SetIndexBuffer(_skybox.IndexBuffer, 0, _skybox.IndexType);
             context.SetSRV(0, _envTexture);
             context.SetSampler(0, _defaultSampler);
             context.DrawIndexed(_skybox.IndexCount, 1);
+
+            // Draw PBR model.
+            context.SetPipeline(_pbrPipeline);
+            context.SetVertexBuffer(0, _pbrMesh.VertexBuffer);
+            context.SetIndexBuffer(_pbrMesh.IndexBuffer, 0, _pbrMesh.IndexType);
+
+            context.SetSRV(0, _albedoTexture);
+            context.SetSRV(1, _normalTexture);
+            context.SetSRV(2, _metalnessTexture);
+            context.SetSRV(3, _roughnessTexture);
+            context.SetSRV(4, _envTexture);
+            context.SetSRV(5, _irmapTexture);
+            context.SetSRV(6, _spBRDF_LUT);
+
+            context.SetSampler(0, _defaultSampler);
+            context.SetSampler(1, _spBRDF_Sampler);
+            context.DrawIndexed(_pbrMesh.IndexCount, 1);
         }
 
         // Draw a full screen triangle for postprocessing/tone mapping.
@@ -393,6 +504,13 @@ public sealed class Application : GraphicsObject
             );
     }
 
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    public struct Light
+    {
+        public Vector3 Direction;
+        public Vector3 Radiance;
+        public bool Enabled;
+    }
 
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     public struct TransformCB

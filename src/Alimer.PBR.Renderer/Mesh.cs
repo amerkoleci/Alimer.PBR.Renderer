@@ -27,16 +27,32 @@ public sealed class Mesh : GraphicsObject
     }
 
 
-    private Mesh(GraphicsDevice graphicsDevice, List<VertexMesh> vertices, List<ushort> indices)
+    private Mesh(GraphicsDevice graphicsDevice, List<VertexMesh> vertices, List<uint> indices)
     {
         VertexBuffer = AddDisposable(graphicsDevice.CreateBuffer(vertices.ToArray(), BufferUsage.Vertex));
-        IndexBuffer = AddDisposable(graphicsDevice.CreateBuffer(indices.ToArray(), BufferUsage.Index));
         IndexCount = indices.Count;
+
+        IndexType = vertices.Count > 65536 ? IndexType.Uint32 : IndexType.Uint16;
+        if (IndexType == IndexType.Uint32)
+        {
+            IndexBuffer = AddDisposable(graphicsDevice.CreateBuffer(indices.ToArray(), BufferUsage.Index));
+        }
+        else
+        {
+            List<ushort> shortIndices = new(indices.Count);
+            for (int i = 0; i < indices.Count; ++i)
+            {
+                shortIndices.Add((ushort)indices[i]);
+            }
+
+            IndexBuffer = AddDisposable(graphicsDevice.CreateBuffer(shortIndices.ToArray(), BufferUsage.Index));
+        }
     }
 
     public readonly GraphicsBuffer VertexBuffer;
     public readonly GraphicsBuffer IndexBuffer;
     public readonly int IndexCount;
+    public readonly IndexType IndexType;
 
     public static Mesh FromFile(GraphicsDevice graphicsDevice, string filePath)
     {
@@ -72,7 +88,7 @@ public sealed class Mesh : GraphicsObject
         bool hasTangentsAndBitangents = mesh->MTangents is not null;
         bool hasHasTexCoords0 = mesh->MTextureCoords[0] is not null;
         List<VertexMesh> vertices = new((int)mesh->MNumVertices);
-        List<ushort> indices = new((int)mesh->MNumFaces);
+        List<uint> indices = new((int)mesh->MNumFaces);
 
         for (int i = 0; i < (int)mesh->MNumVertices; ++i)
         {
@@ -99,9 +115,9 @@ public sealed class Mesh : GraphicsObject
         for (int i = 0; i < (int)mesh->MNumFaces; ++i)
         {
             Guard.IsTrue(mesh->MFaces[i].MNumIndices == 3);
-            indices.Add((ushort)mesh->MFaces[i].MIndices[0]);
-            indices.Add((ushort)mesh->MFaces[i].MIndices[1]);
-            indices.Add((ushort)mesh->MFaces[i].MIndices[2]);
+            indices.Add((uint)mesh->MFaces[i].MIndices[0]);
+            indices.Add((uint)mesh->MFaces[i].MIndices[1]);
+            indices.Add((uint)mesh->MFaces[i].MIndices[2]);
         }
 
         return new(graphicsDevice, vertices, indices);

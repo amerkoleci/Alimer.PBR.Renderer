@@ -89,6 +89,26 @@ public readonly record struct TextureDescription
         int width,
         int height,
         int mipLevels,
+        TextureUsage usage = TextureUsage.ShaderRead,
+        int sampleCount = 1)
+    {
+        return new TextureDescription(
+            TextureDimension.Texture2D,
+            format,
+            width,
+            height,
+            1,
+            mipLevels,
+            usage,
+            sampleCount
+            );
+    }
+
+    public static TextureDescription Texture2DArray(
+        TextureFormat format,
+        int width,
+        int height,
+        int mipLevels,
         int arrayLayers,
         TextureUsage usage = TextureUsage.ShaderRead,
         int sampleCount = 1)

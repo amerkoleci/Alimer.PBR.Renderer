@@ -30,14 +30,14 @@ cbuffer ShadingConstants : register(b0)
 	float3 eyePosition;
 };
 
-struct VertexShaderInput
-{
-	float3 position  : POSITION;
-	float3 normal    : NORMAL;
-	float3 tangent   : TANGENT;
-	float3 bitangent : BITANGENT;
-	float2 texcoord  : TEXCOORD;
+struct VertexInput {
+	float3 position  : ATTRIBUTE0;
+	float3 normal    : ATTRIBUTE1;
+	float3 tangent   : ATTRIBUTE2;
+	float3 bitangent : ATTRIBUTE3;
+	float2 texcoord  : ATTRIBUTE4;
 };
+
 struct PixelShaderInput
 {
 	float4 pixelPosition : SV_POSITION;
@@ -97,7 +97,7 @@ uint querySpecularTextureLevels()
 }
 
 // Vertex shader
-PixelShaderInput main_vs(VertexShaderInput vin)
+PixelShaderInput main_vs(in VertexInput vin)
 {
 	PixelShaderInput vout;
 	vout.position = mul(sceneRotationMatrix, float4(vin.position, 1.0)).xyz;

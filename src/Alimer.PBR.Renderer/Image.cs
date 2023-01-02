@@ -53,7 +53,22 @@ public sealed class Image
         else
         {
             ImageResult imageResult = ImageResult.FromStream(stream, (ColorComponents)channels);
-            return new(imageResult.Width, imageResult.Height, TextureFormat.Rgba8Unorm, imageResult.Data);
+            TextureFormat format = TextureFormat.Rgba8Unorm;
+            switch(imageResult.Comp)
+            {
+                case ColorComponents.Grey:
+                    format = TextureFormat.R8Unorm;
+                    break;
+                case ColorComponents.GreyAlpha:
+                    format = TextureFormat.Rg8Unorm;
+                    break;
+                case ColorComponents.RedGreenBlue:
+                    throw new NotSupportedException("RGB images are not supported");
+                case ColorComponents.RedGreenBlueAlpha:
+                    format = TextureFormat.Rgba8Unorm;
+                    break;
+            }
+            return new(imageResult.Width, imageResult.Height, format, imageResult.Data);
         }
     }
 }
