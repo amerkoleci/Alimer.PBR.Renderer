@@ -34,14 +34,13 @@ public sealed class Application : GraphicsObject
     private readonly Mesh _skybox;
     private readonly Texture _envTexture;
 
-    private readonly GraphicsBuffer _triangleVertexBuffer;
-    private readonly Pipeline _trianglePipeline;
+    private readonly Pipeline _tonemapPipeline;
 
     private readonly ConstantBuffer<TransformCB> _transformCB;
 
     public Size Size { get; private set; }
 
-    public Application(GraphicsBackend graphicsBackend, int width = 1200, int height = 800, int maxSamples = 16)
+    public Application(GraphicsBackend graphicsBackend, int width = 1024, int height = 800, int maxSamples = 16)
     {
         SDL_GetVersion(out SDL_version version);
         //Log.Info($"SDL v{version.major}.{version.minor}.{version.patch}");
@@ -86,6 +85,7 @@ public sealed class Application : GraphicsObject
 
         SamplerDescription samplerDesc = new()
         {
+            Label = "Default Sampler",
             AddressModeU = SamplerAddressMode.Repeat,
             AddressModeV = SamplerAddressMode.Repeat,
             AddressModeW = SamplerAddressMode.Repeat,
@@ -98,6 +98,7 @@ public sealed class Application : GraphicsObject
 
         SamplerDescription samplerComputeSampler = new()
         {
+            Label = "Compute Sampler",
             AddressModeU = SamplerAddressMode.Repeat,
             AddressModeV = SamplerAddressMode.Repeat,
             AddressModeW = SamplerAddressMode.Repeat,
@@ -108,14 +109,14 @@ public sealed class Application : GraphicsObject
         };
         _computeSampler = AddDisposable(_graphicsDevice.CreateSampler(samplerComputeSampler));
 
-        _transformCB = AddDisposable(new ConstantBuffer<TransformCB>(_graphicsDevice));
+        _transformCB = AddDisposable(new ConstantBuffer<TransformCB>(_graphicsDevice, "Transform"));
 
         _skybox = AddDisposable(MeshFromFile("skybox.obj"));
         RenderPipelineDescription skyboxPipelineDesc = new()
         {
             VertexShader = CompileShader("skybox.hlsl", "main_vs", "vs_5_0"),
             FragmentShader = CompileShader("skybox.hlsl", "main_ps", "ps_5_0"),
-            VertexDescriptor = new(new VertexLayoutDescriptor(new VertexAttributeDescriptor(VertexFormat.Float32x3, 0))),
+            VertexDescriptor = new(new VertexLayoutDescriptor((uint)VertexMesh.SizeInBytes, new VertexAttributeDescriptor(VertexFormat.Float32x3, 0))),
             DepthStencil = new DepthStencilDescriptor()
             {
                 DepthWriteEnabled = false,
@@ -123,6 +124,14 @@ public sealed class Application : GraphicsObject
             }
         };
         _skyboxPipeline = AddDisposable(_graphicsDevice.CreateRenderPipeline(skyboxPipelineDesc));
+
+        RenderPipelineDescription tonemapPipelineDesc = new()
+        {
+            Label = "Tonemap",
+            VertexShader = CompileShader("tonemap.hlsl", "main_vs", "vs_5_0"),
+            FragmentShader = CompileShader("tonemap.hlsl", "main_ps", "ps_5_0")
+        };
+        _tonemapPipeline = AddDisposable(_graphicsDevice.CreateRenderPipeline(tonemapPipelineDesc));
 
         // Unfiltered environment cube map (temporary).
         using Texture envTextureUnfiltered = CreateTextureCube(TextureFormat.Rgba16Float, 1024, 1024);
@@ -189,22 +198,6 @@ public sealed class Application : GraphicsObject
                 context.Dispatch(numGroups, numGroups, 6);
             }
         }
-
-        ReadOnlySpan<VertexPositionColor> triangleVertices = stackalloc VertexPositionColor[]
-        {
-            new VertexPositionColor(new Vector3(0.0f, 0.5f, 0.5f), Colors.Red),
-            new VertexPositionColor(new Vector3(0.5f, -0.5f, 0.5f), Colors.Lime),
-            new VertexPositionColor(new Vector3(-0.5f, -0.5f, 0.5f), Colors.Blue)
-        };
-        _triangleVertexBuffer = AddDisposable(_graphicsDevice.CreateBuffer(triangleVertices, BufferUsage.Vertex));
-
-        RenderPipelineDescription trianglePipeline = new()
-        {
-            VertexShader = CompileShader("triangle.hlsl", "main_vs", "vs_5_0"),
-            FragmentShader = CompileShader("triangle.hlsl", "main_ps", "ps_5_0"),
-            VertexDescriptor = new(new VertexLayoutDescriptor(VertexPositionColor.Attributes)),
-        };
-        _trianglePipeline = AddDisposable(_graphicsDevice.CreateRenderPipeline(trianglePipeline));
     }
 
     private static Image FromFile(string fileName)
@@ -266,8 +259,7 @@ public sealed class Application : GraphicsObject
 
         CommandContext context = _graphicsDevice.DefaultContext;
 
-        Matrix4x4 projectionMatrix = Matrix4x4.CreatePerspectiveFieldOfView(
-            MathHelper.ToRadians(_viewSettings.FieldOfView), (float)Size.Width / Size.Height, 1.0f, 1000.0f);
+        Matrix4x4 projectionMatrix = perspectiveFovRH_NO(_viewSettings.FieldOfView, (float)Size.Width, Size.Height, 1.0f, 1000.0f);
 
         Matrix4x4 viewRotationMatrix = EulerAngleXY(MathHelper.ToRadians(_viewSettings.Pitch), MathHelper.ToRadians(_viewSettings.Yaw));
         //viewRotationMatrix = Matrix4x4.Transpose(viewRotationMatrix);
@@ -277,7 +269,7 @@ public sealed class Application : GraphicsObject
         TransformCB transformData = new()
         {
             ViewProjectionMatrix = Matrix4x4.Multiply(viewRotationMatrix, projectionMatrix),
-            SkyProjectionMatrix = Matrix4x4.Multiply(viewRotationMatrix, projectionMatrix),
+            SkyProjectionMatrix = Matrix4x4.Transpose(Matrix4x4.Multiply(viewRotationMatrix, projectionMatrix)),
             SceneRotationMatrix = Matrix4x4.Identity
         };
         _transformCB.SetData(context, transformData);
@@ -286,28 +278,21 @@ public sealed class Application : GraphicsObject
         // Prepare framebuffer for rendering.
         //context.SetRenderTarget(_framebuffer);
 
-        context.SetRenderTarget(null, Colors.CornflowerBlue);
+        context.SetRenderTarget(null);
 
         // Draw skybox.
         context.SetPipeline(_skyboxPipeline);
-        context.SetVertexBuffer(0, _skybox.VertexBuffer, (uint)VertexMesh.SizeInBytes, 0);
+        context.SetVertexBuffer(0, _skybox.VertexBuffer);
         context.SetIndexBuffer(_skybox.IndexBuffer, 0, IndexType.Uint16);
         context.SetSRV(0, _envTexture);
         context.SetSampler(0, _defaultSampler);
         context.DrawIndexed(_skybox.IndexCount, 1);
 
         // Draw a full screen triangle for postprocessing/tone mapping.
-        //context.SetRenderTarget(null);
-        //m_context->IASetInputLayout(nullptr);
-        //m_context->VSSetShader(m_tonemapProgram.vertexShader.Get(), nullptr, 0);
-        //m_context->PSSetShader(m_tonemapProgram.pixelShader.Get(), nullptr, 0);
-        //m_context->PSSetShaderResources(0, 1, m_resolveFramebuffer.srv.GetAddressOf());
-        //m_context->PSSetSamplers(0, 1, m_computeSampler.GetAddressOf());
-        //m_context->Draw(3, 0);
-
-        // Draw triangle
-        //context.SetVertexBuffer(0, _triangleVertexBuffer);
-        //context.SetPipeline(_trianglePipeline);
+        context.SetRenderTarget(null);
+        //context.SetPipeline(_tonemapPipeline);
+        //context.SetSRV(0, _resolveFramebuffer.srv);
+        //context.SetSampler(0, _computeSampler);
         //context.Draw(3);
 
         _graphicsDevice.EndFrame();
@@ -345,6 +330,27 @@ public sealed class Application : GraphicsObject
 
     private void HandleWindowEvent(in SDL_Event evt)
     {
+    }
+
+    private static Matrix4x4 perspectiveFovRH_NO(float fov, float width, float height, float zNear, float zFar)
+    {
+        //assert(width > static_cast<T>(0));
+        //assert(height > static_cast<T>(0));
+        //assert(fov > static_cast<T>(0));
+
+
+        float rad = fov;
+        float h = MathF.Cos(0.5f * rad) / MathF.Sin(0.5f * rad);
+        float w = h * height / width; ///todo max(width , Height) / min(width , Height)?
+
+        Matrix4x4 result = default;
+        result.M11 = w;
+        result.M22 = h;
+        result.M33 = -(zFar + zNear) / (zFar - zNear);
+        result.M34 = -1.0f;
+        result.M43 = -(2.0f * zFar * zNear) / (zFar - zNear);
+
+        return result;
     }
 
     private static Matrix4x4 EulerAngleXY(float angleX, float angleY)

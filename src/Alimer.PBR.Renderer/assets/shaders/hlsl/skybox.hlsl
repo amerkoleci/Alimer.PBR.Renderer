@@ -24,7 +24,7 @@ PixelShaderInput main_vs(float3 position : ATTRIBUTE0)
 {
 	PixelShaderInput vout;
 	vout.localPosition = position;
-	vout.pixelPosition = mul(skyProjectionMatrix, float4(position, 1.0));
+	vout.pixelPosition = mul(skyProjectionMatrix, float4(position, 1.0f));
 	return vout;
 }
 

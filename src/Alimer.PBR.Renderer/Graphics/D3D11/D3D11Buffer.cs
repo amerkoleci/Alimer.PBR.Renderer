@@ -39,7 +39,6 @@ internal sealed unsafe class D3D11Buffer : GraphicsBuffer
             {
                 bindFlags |= BindFlags.IndexBuffer;
             }
-
         }
 
         D3D11BufferDesc d3dDesc = new(size, bindFlags, usage, cpuAccessFlags);
@@ -57,6 +56,11 @@ internal sealed unsafe class D3D11Buffer : GraphicsBuffer
         {
             throw new InvalidOperationException("D3D11: Failed to create buffer");
         }
+
+        if (!string.IsNullOrEmpty(description.Label))
+        {
+            _handle.Get()->SetDebugName(description.Label);
+        }
     }
 
     public ID3D11Buffer* Handle => _handle.Get();
@@ -70,5 +74,10 @@ internal sealed unsafe class D3D11Buffer : GraphicsBuffer
         {
             _handle.Dispose();
         }
+    }
+
+    protected override void OnLabelChanged(string newLabel)
+    {
+        Handle->SetDebugName(newLabel);
     }
 }

@@ -13,9 +13,14 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
 {
     private readonly D3D11GraphicsDevice _device;
     private readonly ID3D11DeviceContext1* _context;
+    private D3D11Pipeline? _currentPipeline;
     private ID3D11DepthStencilState* _currentDepthStencilState;
     private ID3D11RasterizerState* _currentRasterizerState;
     private D3DPrimitiveTopology _currentPrimitiveTopology;
+
+    private ID3D11Buffer*[] _vertexBindings = new ID3D11Buffer*[8];
+    private uint[] _vertexOffsets = new uint[8];
+
     private readonly ID3D11Buffer*[] _constantBuffers = new ID3D11Buffer*[4];
     private readonly ID3D11SamplerState*[] _samplers = new ID3D11SamplerState*[16];
     private readonly ID3D11ShaderResourceView*[] _srvs = new ID3D11ShaderResourceView*[16];
@@ -43,6 +48,11 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
     public override void SetPipeline(Pipeline pipeline)
     {
         D3D11Pipeline d3d11Pipeline = (D3D11Pipeline)pipeline;
+        if (_currentPipeline == d3d11Pipeline)
+            return;
+
+        _currentPipeline = d3d11Pipeline;
+
         if (d3d11Pipeline.PipelineType == PipelineType.Render)
         {
             _context->CSSetShader(null);
@@ -108,11 +118,15 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
         _context->RSSetScissorRects(1, &scissorRect);
     }
 
-    public override void SetVertexBuffer(uint slot, GraphicsBuffer buffer, uint stride, uint offset = 0)
+    public override void SetVertexBuffer(uint slot, GraphicsBuffer buffer, uint offset = 0)
     {
-        var d3dBuffer = ((D3D11Buffer)buffer).Handle;
-        //uint stride = 28;
-        _context->IASetVertexBuffers(0, 1u, &d3dBuffer, &stride, &offset);
+        var d3dBuffer = ((D3D11Buffer)buffer);
+
+        if (_vertexBindings[slot] != d3dBuffer.Handle || _vertexOffsets[slot] != offset)
+        {
+            _vertexBindings[slot] = d3dBuffer.Handle;
+            _vertexOffsets[slot] = offset;
+        }
     }
 
     public override void SetIndexBuffer(GraphicsBuffer buffer, uint offset, IndexType indexType)
@@ -194,7 +208,9 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
         PrepareDispatch();
         _context->Dispatch((uint)groupCountX, (uint)groupCountY, (uint)groupCountZ);
 
+        ID3D11Buffer* nullBuffer = default;
         ID3D11UnorderedAccessView* nullUAV = default;
+        _context->CSSetConstantBuffers(0, 1, &nullBuffer);
         _context->CSSetUnorderedAccessViews(0, 1, &nullUAV, null);
     }
 
@@ -268,6 +284,15 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
 
     private void PrepareDraw()
     {
+        if (_currentPipeline!.NumVertexBindings > 0)
+        {
+            fixed (ID3D11Buffer** vbo = _vertexBindings)
+            fixed (uint* offsets = _vertexOffsets)
+            {
+                _context->IASetVertexBuffers(0, _currentPipeline.NumVertexBindings, vbo, _currentPipeline.Strides, offsets);
+            }
+        }
+
         if (_numCBVBindings > 0)
         {
             fixed (ID3D11Buffer** cbvsPtr = _constantBuffers)

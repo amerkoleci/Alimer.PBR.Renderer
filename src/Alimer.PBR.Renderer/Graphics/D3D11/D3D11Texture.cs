@@ -83,6 +83,11 @@ internal sealed unsafe class D3D11Texture : Texture
             throw new InvalidOperationException("D3D11: Failed to create texture");
         }
 
+        if (!string.IsNullOrEmpty(description.Label))
+        {
+            _handle.Get()->SetDebugName(description.Label);
+        }
+
         if (d3dDesc.MipLevels == 0)
         {
             _handle.Get()->GetDesc(&d3dDesc);
@@ -126,6 +131,11 @@ internal sealed unsafe class D3D11Texture : Texture
             _srv.Dispose();
             _handle.Dispose();
         }
+    }
+
+    protected override void OnLabelChanged(string newLabel)
+    {
+        Handle->SetDebugName(newLabel);
     }
 
     public Format DxgiFormat { get; }

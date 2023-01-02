@@ -13,6 +13,8 @@ internal sealed unsafe class D3D11Pipeline : Pipeline
     private readonly ComPtr<ID3D11VertexShader> _vs = default;
     private readonly ComPtr<ID3D11PixelShader> _ps = default;
     private readonly ComPtr<ID3D11InputLayout> _inputLayout = default;
+    private readonly uint _numVertexBindings = 0;
+    private readonly uint[] _strides = new uint[8];
 
     private readonly ComPtr<ID3D11DepthStencilState> _depthStencilState = default;
     private readonly ComPtr<ID3D11RasterizerState> _rasterizerState = default;
@@ -41,7 +43,8 @@ internal sealed unsafe class D3D11Pipeline : Pipeline
             throw new InvalidOperationException("Failed to create pixel shader from compiled bytecode");
         }
 
-        if (description.VertexDescriptor.Layouts.Length > 0)
+        if (description.VertexDescriptor.Layouts != null &&
+            description.VertexDescriptor.Layouts.Length > 0)
         {
             ReadOnlySpan<byte> semanticName = "ATTRIBUTE"u8;
             int d3d11InputElementIndex = 0;
@@ -76,6 +79,9 @@ internal sealed unsafe class D3D11Pipeline : Pipeline
 
                     d3d11InputElementIndex++;
                 }
+
+                _numVertexBindings = Math.Max(slot + 1, _numVertexBindings);
+                _strides[slot] = layout.Stride;
             }
 
             fixed (InputElementDescription* pInputElements = d3d11InputElementDescs)
@@ -106,7 +112,7 @@ internal sealed unsafe class D3D11Pipeline : Pipeline
         {
             FillMode = FillMode.Solid,
             CullMode = CullMode.Back,
-            FrontCounterClockwise = false,
+            FrontCounterClockwise = true,
             DepthBias = 0,
             DepthBiasClamp = 0.0f,
             SlopeScaledDepthBias = 0.0f,
@@ -123,6 +129,8 @@ internal sealed unsafe class D3D11Pipeline : Pipeline
     public ID3D11VertexShader* VS => _vs;
     public ID3D11PixelShader* PS => _ps;
     public ID3D11InputLayout* InputLayout => _inputLayout;
+    public uint NumVertexBindings => _numVertexBindings;
+    public uint* Strides => Utilities.GetPointer(_strides.AsSpan());
 
     public ID3D11DepthStencilState* DepthStencilState => _depthStencilState;
     public ID3D11RasterizerState* RasterizerState => _rasterizerState;

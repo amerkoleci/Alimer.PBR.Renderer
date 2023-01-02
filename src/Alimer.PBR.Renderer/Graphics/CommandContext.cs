@@ -11,7 +11,7 @@ public abstract class CommandContext : GraphicsObject
 
     public abstract void SetRenderTarget(FrameBuffer? frameBuffer = default, Color4? clearColor = default, float clearDepth = 1.0f);
 
-    public abstract void SetVertexBuffer(uint slot, GraphicsBuffer buffer, uint stride, uint offset = 0);
+    public abstract void SetVertexBuffer(uint slot, GraphicsBuffer buffer, uint offset = 0);
     public abstract void SetIndexBuffer(GraphicsBuffer buffer, uint offset, IndexType indexType);
 
     public abstract void SetConstantBuffer(int index, GraphicsBuffer buffer);

@@ -55,6 +55,11 @@ internal sealed unsafe class D3D11Sampler : Sampler
         {
             throw new InvalidOperationException("D3D11: Failed to create sampler state");
         }
+
+        if (!string.IsNullOrEmpty(description.Label))
+        {
+            _handle.Get()->SetDebugName(description.Label);
+        }
     }
 
     public ID3D11SamplerState* Handle => _handle.Get();
@@ -67,5 +72,10 @@ internal sealed unsafe class D3D11Sampler : Sampler
         {
             _handle.Dispose();
         }
+    }
+
+    protected override void OnLabelChanged(string newLabel)
+    {
+        Handle->SetDebugName(newLabel);
     }
 }
