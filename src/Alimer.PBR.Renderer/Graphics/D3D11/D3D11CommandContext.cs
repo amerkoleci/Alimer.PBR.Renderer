@@ -4,8 +4,12 @@
 using Vortice.Mathematics;
 using Win32.Graphics.Direct3D11;
 using D3DPrimitiveTopology = Win32.Graphics.Direct3D.PrimitiveTopology;
+using static Win32.Apis;
 using static Win32.Graphics.Direct3D11.Apis;
 using System.Runtime.CompilerServices;
+using CommunityToolkit.Diagnostics;
+using Win32;
+using System.Drawing;
 
 namespace Alimer.Graphics.D3D11;
 
@@ -13,12 +17,18 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
 {
     private readonly D3D11GraphicsDevice _device;
     private readonly ID3D11DeviceContext1* _context;
+    private readonly ComPtr<ID3DUserDefinedAnnotation> _annotation;
+
     private D3D11Pipeline? _currentPipeline;
     private ID3D11DepthStencilState* _currentDepthStencilState;
     private ID3D11RasterizerState* _currentRasterizerState;
     private D3DPrimitiveTopology _currentPrimitiveTopology;
 
-    private ID3D11Buffer*[] _vertexBindings = new ID3D11Buffer*[8];
+    private RenderPassDescriptor _currentRenderPass;
+    private readonly ID3D11RenderTargetView*[] _rtvs = new ID3D11RenderTargetView*[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT];
+    private ID3D11DepthStencilView* DSV = null;
+
+    private readonly ID3D11Buffer*[] _vertexBindings = new ID3D11Buffer*[8];
     private uint[] _vertexOffsets = new uint[8];
 
     private readonly ID3D11Buffer*[] _constantBuffers = new ID3D11Buffer*[4];
@@ -34,6 +44,7 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
     {
         _device = device;
         _context = device.NativeContext;
+        _context->QueryInterface(__uuidof<ID3DUserDefinedAnnotation>(), _annotation.GetVoidAddressOf());
     }
 
     protected override void Dispose(bool disposing)
@@ -42,6 +53,212 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
 
         if (disposing)
         {
+            _annotation.Dispose();
+        }
+    }
+
+    public override void PushDebugGroup(string groupLabel)
+    {
+        fixed (char* groupLabelPtr = groupLabel)
+        {
+            _annotation.Get()->BeginEvent((ushort*)groupLabelPtr);
+        }
+    }
+
+    public override void PopDebugGroup()
+    {
+        _annotation.Get()->EndEvent();
+    }
+
+    public override void InsertDebugMarker(string debugLabel)
+    {
+        fixed (char* debugLabelPtr = debugLabel)
+        {
+            _annotation.Get()->SetMarker((ushort*)debugLabelPtr);
+        }
+    }
+
+    protected override void BeginRenderPassCore(in RenderPassDescriptor renderPass)
+    {
+        uint numRTVs = 0;
+        DSV = default;
+        Size renderArea = new(int.MaxValue, int.MaxValue);
+
+        if (!string.IsNullOrEmpty(renderPass.Label))
+        {
+            PushDebugGroup(renderPass.Label);
+        }
+
+        if (renderPass.ColorAttachments.Length > 0)
+        {
+            for (uint slot = 0; slot < renderPass.ColorAttachments.Length; slot++)
+            {
+                ref RenderPassColorAttachment attachment = ref renderPass.ColorAttachments[slot];
+                Guard.IsTrue(attachment.Texture is not null);
+
+                D3D11Texture texture = (D3D11Texture)attachment.Texture;
+                int mipLevel = attachment.MipLevel;
+                int slice = attachment.Slice;
+
+                renderArea.Width = Math.Min(renderArea.Width, texture.GetWidth(mipLevel));
+                renderArea.Height = Math.Min(renderArea.Height, texture.GetHeight(mipLevel));
+
+                _rtvs[numRTVs] = texture.GetRTV(mipLevel, slice);
+
+                switch (attachment.LoadAction)
+                {
+                    case LoadAction.Load:
+                        break;
+
+                    case LoadAction.Clear:
+                        Color4 clearColorValue = attachment.ClearColor;
+                        _context->ClearRenderTargetView(_rtvs[numRTVs], (float*)&clearColorValue);
+                        break;
+                    case LoadAction.DontCare:
+                        _context->DiscardView((ID3D11View*)_rtvs[numRTVs]);
+                        break;
+                }
+
+                numRTVs++;
+            }
+        }
+
+        if (renderPass.DepthStencilAttachment.HasValue)
+        {
+            RenderPassDepthStencilAttachment attachment = renderPass.DepthStencilAttachment.Value;
+            Guard.IsTrue(attachment.Texture is not null);
+
+            D3D11Texture texture = (D3D11Texture)attachment.Texture;
+            int mipLevel = attachment.MipLevel;
+            int slice = attachment.Slice;
+
+            renderArea.Width = Math.Min(renderArea.Width, texture.GetWidth(mipLevel));
+            renderArea.Height = Math.Min(renderArea.Height, texture.GetHeight(mipLevel));
+
+            DSV = texture.GetDSV(mipLevel, slice);
+
+            ClearFlags clearFlags = ClearFlags.None;
+            switch (attachment.DepthLoadAction)
+            {
+                case LoadAction.Load:
+                    break;
+
+                case LoadAction.Clear:
+                    clearFlags |= ClearFlags.Depth;
+                    break;
+                case LoadAction.DontCare:
+                    _context->DiscardView((ID3D11View*)DSV);
+                    break;
+            }
+
+            if (texture.Format.IsDepthStencilFormat())
+            {
+                switch (attachment.StencilLoadAction)
+                {
+                    case LoadAction.Load:
+                        break;
+
+                    case LoadAction.Clear:
+                        clearFlags |= ClearFlags.Stencil;
+                        break;
+                    case LoadAction.DontCare:
+                        _context->DiscardView((ID3D11View*)DSV);
+                        break;
+                }
+            }
+
+            if (clearFlags != ClearFlags.None)
+            {
+                _context->ClearDepthStencilView(DSV, clearFlags, attachment.ClearDepth, (byte)attachment.ClearStencil);
+            }
+        }
+
+        fixed (ID3D11RenderTargetView** RTVS = _rtvs)
+        {
+            _context->OMSetRenderTargets(numRTVs, RTVS, DSV);
+        }
+
+        Win32.Numerics.Viewport viewport = new((float)renderArea.Width, (float)renderArea.Height);
+        RawRect scissorRect = new(0, 0, renderArea.Width, renderArea.Height);
+
+        _context->RSSetViewports(1, &viewport);
+        _context->RSSetScissorRects(1, &scissorRect);
+
+        _currentRenderPass = renderPass;
+    }
+
+    protected override void EndRenderPassCore()
+    {
+        if (_currentRenderPass.ColorAttachments.Length > 0)
+        {
+            for (int index = 0; index < _currentRenderPass.ColorAttachments.Length; index++)
+            {
+                ref RenderPassColorAttachment attachment = ref _currentRenderPass.ColorAttachments[index];
+                Guard.IsTrue(attachment.Texture is not null);
+
+                D3D11Texture texture = (D3D11Texture)attachment.Texture;
+                int mipLevel = attachment.MipLevel;
+                int slice = attachment.Slice;
+                uint srcSubResource = D3D11CalcSubresource((uint)mipLevel, (uint)slice, (uint)texture.MipLevels);
+
+                switch (attachment.StoreAction)
+                {
+                    case StoreAction.Store:
+                        if (attachment.ResolveTexture is not null)
+                        {
+                            D3D11Texture resolveTexture = (D3D11Texture)attachment.ResolveTexture!;
+                            uint dstSubResource = D3D11CalcSubresource((uint)attachment.ResolveMipLevel, (uint)attachment.ResolveSlice, (uint)resolveTexture.MipLevels);
+                            _context->ResolveSubresource(resolveTexture.Handle, dstSubResource, texture.Handle, srcSubResource, resolveTexture.DxgiFormat);
+                        }
+                        break;
+
+                    case StoreAction.DontCare:
+                        _context->DiscardView((ID3D11View*)_rtvs[index]);
+                        break;
+                }
+            }
+        }
+
+        if (_currentRenderPass.DepthStencilAttachment.HasValue)
+        {
+            RenderPassDepthStencilAttachment attachment = _currentRenderPass.DepthStencilAttachment.Value;
+            Guard.IsTrue(attachment.Texture is not null);
+
+            ClearFlags clearFlags = ClearFlags.None;
+            switch (attachment.DepthStoreAction)
+            {
+                case StoreAction.Store:
+                    break;
+
+                case StoreAction.DontCare:
+                    _context->DiscardView((ID3D11View*)DSV);
+                    break;
+            }
+
+            if (attachment.Texture.Format.IsDepthStencilFormat())
+            {
+                switch (attachment.StencilStoreAction)
+                {
+                    case StoreAction.Store:
+                        break;
+
+                    case StoreAction.DontCare:
+                        _context->DiscardView((ID3D11View*)DSV);
+                        break;
+                }
+            }
+
+            if (clearFlags != ClearFlags.None)
+            {
+                _context->ClearDepthStencilView(DSV, clearFlags, attachment.ClearDepth, (byte)attachment.ClearStencil);
+            }
+        }
+
+        _context->OMSetRenderTargets(0, null, null);
+
+        if (!string.IsNullOrEmpty(_currentRenderPass.Label))
+        {
+            PopDebugGroup();
         }
     }
 
@@ -83,39 +300,6 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
         {
             _context->CSSetShader(d3d11Pipeline.CS, null, 0);
         }
-    }
-
-    public override void SetRenderTarget(FrameBuffer? frameBuffer = null, Color4? clearColor = default, float clearDepth = 1.0f)
-    {
-        Viewport viewport = default;
-        Win32.RawRect scissorRect = default;
-
-        if (frameBuffer is null)
-        {
-            viewport = new((float)_device.Size.Width, (float)_device.Size.Height);
-            scissorRect = new(0, 0, _device.Size.Width, _device.Size.Height);
-
-
-            ID3D11RenderTargetView* rtv = _device.BackBufferRTV;
-            _context->OMSetRenderTargets(1, &rtv, null);
-
-            if (clearColor.HasValue)
-            {
-                Color4 clearColorValue = clearColor.Value;
-                _context->ClearRenderTargetView(rtv, (float*)&clearColorValue);
-            }
-        }
-        else
-        {
-            viewport = new((float)frameBuffer.Size.Width, (float)frameBuffer.Size.Height);
-            scissorRect = new(0, 0, frameBuffer.Size.Width, frameBuffer.Size.Height);
-
-            ((D3D11FrameBuffer)frameBuffer).Bind(_context);
-        }
-
-
-        _context->RSSetViewports(1, (Win32.Numerics.Viewport*)&viewport);
-        _context->RSSetScissorRects(1, &scissorRect);
     }
 
     public override void SetVertexBuffer(uint slot, GraphicsBuffer buffer, uint offset = 0)

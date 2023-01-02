@@ -11,5 +11,4 @@ public readonly record struct VertexDescriptor
     }
 
     public VertexLayoutDescriptor[] Layouts { get; init; }
-
 }

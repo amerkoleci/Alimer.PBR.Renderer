@@ -29,16 +29,16 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
     private readonly ComPtr<ID3D11DeviceContext1> _context;
     private readonly FeatureLevel _featureLevel = FeatureLevel.Level_9_1;
     private readonly ComPtr<IDXGISwapChain1> _swapChain;
-    private ComPtr<ID3D11Texture2D> _backBufferTexture = default;
-    private ComPtr<ID3D11RenderTargetView> _backBufferRTV = default;
+    private D3D11Texture? _colorTexture;
 
     public Size Size { get; private set; }
-    public Format ColorFormat { get; } = Format.B8G8R8A8Unorm;
+    public TextureFormat ColorFormat { get; } = TextureFormat.Bgra8Unorm;
     public ID3D11Device1* NativeDevice => _device;
     public ID3D11DeviceContext1* NativeContext => _context;
-    public ID3D11RenderTargetView* BackBufferRTV => _backBufferRTV;
 
     public override CommandContext DefaultContext { get; }
+
+    public override Texture ColorTexture => _colorTexture!;
 
     public override int Samples { get; }
 
@@ -196,7 +196,7 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
             {
                 Width = 0u,
                 Height = 0u,
-                Format = ColorFormat,
+                Format = ColorFormat.ToDxgiFormat(),
                 BufferCount = 2u,
                 BufferUsage = Win32.Graphics.Dxgi.Usage.RenderTargetOutput,
                 SampleDesc = SampleDescription.Default,
@@ -234,9 +234,9 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
 
         if (disposing)
         {
-            _backBufferRTV.Dispose();
-            _backBufferTexture.Dispose();
+            _colorTexture.Dispose();
             _swapChain.Dispose();
+            DefaultContext.Dispose();
             _context.Dispose();
             _device.Dispose();
 
@@ -254,7 +254,7 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
 
     private void AfterResize()
     {
-        if (_backBufferTexture.Get() is not null)
+        if (_colorTexture is not null)
         {
         }
 
@@ -263,13 +263,13 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
 
         Size = new Size((int)swapChainDesc.Width, (int)swapChainDesc.Height);
 
-        ThrowIfFailed(
-            _swapChain.Get()->GetBuffer(0, __uuidof<ID3D11Texture2D>(), _backBufferTexture.GetVoidAddressOf())
-            );
+        TextureDescription colorTextureDesc = TextureDescription.Texture2D(ColorFormat, Size.Width, Size.Height, 1, 1, TextureUsage.RenderTarget);
 
-        ThrowIfFailed(_device.Get()->CreateRenderTargetView(
-          (ID3D11Resource*)_backBufferTexture.Get(), null, _backBufferRTV.GetAddressOf())
+        ID3D11Texture2D* d3dHandle = default;
+        ThrowIfFailed(
+            _swapChain.Get()->GetBuffer(0, __uuidof<ID3D11Texture2D>(), (void**)&d3dHandle)
             );
+        _colorTexture = new D3D11Texture(this, colorTextureDesc, d3dHandle);
     }
 
     public override bool BeginFrame()
@@ -295,11 +295,6 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
     protected override Sampler CreateSamplerCore(in SamplerDescription description)
     {
         return new D3D11Sampler(this, description);
-    }
-
-    public override FrameBuffer CreateFrameBuffer(in Size size, int samples, TextureFormat colorFormat, TextureFormat depthstencilFormat)
-    {
-        return new D3D11FrameBuffer(this, size, samples, colorFormat, depthstencilFormat);
     }
 
     public override Pipeline CreateComputePipeline(in ComputePipelineDescription description)

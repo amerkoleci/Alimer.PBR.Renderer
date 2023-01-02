@@ -25,6 +25,7 @@ public abstract class GraphicsDevice : GraphicsObject
     public GraphicsBackend Backend { get; }
 
     public abstract CommandContext DefaultContext { get; }
+    public abstract Texture ColorTexture { get; }
     public abstract int Samples { get; }
 
     public static GraphicsDevice CreateDefault(in SDL_Window window, int maxSamples = 4)
@@ -125,6 +126,4 @@ public abstract class GraphicsDevice : GraphicsObject
     protected abstract unsafe GraphicsBuffer CreateBufferCore(in BufferDescription description, void* initialData);
     protected abstract unsafe Texture CreateTextureCore(in TextureDescription description, void* initialData);
     protected abstract Sampler CreateSamplerCore(in SamplerDescription description);
-
-    public abstract FrameBuffer CreateFrameBuffer(in Size size, int samples, TextureFormat colorFormat, TextureFormat depthstencilFormat);
 }

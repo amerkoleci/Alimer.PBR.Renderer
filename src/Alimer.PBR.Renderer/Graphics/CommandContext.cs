@@ -1,15 +1,48 @@
 ﻿// Copyright © Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
+using CommunityToolkit.Diagnostics;
 using Vortice.Mathematics;
 
 namespace Alimer.Graphics;
 
 public abstract class CommandContext : GraphicsObject
 {
-    public abstract void SetPipeline(Pipeline pipeline);
+    private bool _insideRenderPass;
 
-    public abstract void SetRenderTarget(FrameBuffer? frameBuffer = default, Color4? clearColor = default, float clearDepth = 1.0f);
+    public abstract void PushDebugGroup(string groupLabel);
+    public abstract void PopDebugGroup();
+    public abstract void InsertDebugMarker(string debugLabel);
+
+    public ScopedDebugGroup PushScopedDebugGroup(string groupLabel)
+    {
+        PushDebugGroup(groupLabel);
+        return new(this);
+    }
+
+    public void BeginRenderPass(in RenderPassDescriptor renderPass)
+    {
+        Guard.IsFalse(_insideRenderPass);
+
+        BeginRenderPassCore(renderPass);
+        _insideRenderPass = true;
+    }
+
+    public void EndRenderPass()
+    {
+        Guard.IsTrue(_insideRenderPass);
+
+        EndRenderPassCore();
+        _insideRenderPass = false;
+    }
+
+    public ScopedRenderPass PushScopedPassPass(in RenderPassDescriptor renderPass)
+    {
+        BeginRenderPass(renderPass);
+        return new(this);
+    }
+
+    public abstract void SetPipeline(Pipeline pipeline);
 
     public abstract void SetVertexBuffer(uint slot, GraphicsBuffer buffer, uint offset = 0);
     public abstract void SetIndexBuffer(GraphicsBuffer buffer, uint offset, IndexType indexType);
@@ -77,4 +110,39 @@ public abstract class CommandContext : GraphicsObject
     /// <param name="baseVertex"></param>
     /// <param name="firstInstance"></param>
     public abstract void DrawIndexed(int indexCount, int instanceCount = 1, int firstIndex = 0, int baseVertex = 0, int firstInstance = 0);
+
+    protected abstract void BeginRenderPassCore(in RenderPassDescriptor descriptor);
+    protected abstract void EndRenderPassCore();
+
+    #region Nested
+    public readonly struct ScopedDebugGroup : IDisposable
+    {
+        private readonly CommandContext _commandBuffer;
+
+        public ScopedDebugGroup(CommandContext commandBuffer)
+        {
+            _commandBuffer = commandBuffer;
+        }
+
+        public void Dispose()
+        {
+            _commandBuffer.PopDebugGroup();
+        }
+    }
+
+    public readonly struct ScopedRenderPass : IDisposable
+    {
+        private readonly CommandContext _commandBuffer;
+
+        public ScopedRenderPass(CommandContext commandBuffer)
+        {
+            _commandBuffer = commandBuffer;
+        }
+
+        public void Dispose()
+        {
+            _commandBuffer.EndRenderPass();
+        }
+    }
+    #endregion
 }

@@ -11,10 +11,20 @@ namespace Alimer.Graphics.D3D11;
 
 internal sealed unsafe class D3D11Texture : Texture
 {
-    private readonly ComPtr<ID3D11Texture2D> _handle;
+    private readonly ID3D11Resource* _handle;
     private readonly ComPtr<ID3D11ShaderResourceView> _srv = default;
-    private readonly object _uavLock = new object();
+    private readonly object _rtvLock = new();
+    private readonly object _uavLock = new();
+    private readonly Dictionary<int, ComPtr<ID3D11RenderTargetView>> _rtvs = new();
+    private readonly Dictionary<int, ComPtr<ID3D11DepthStencilView>> _dsvs = new();
     private readonly Dictionary<int, ComPtr<ID3D11UnorderedAccessView>> _uavs = new();
+
+    public D3D11Texture(D3D11GraphicsDevice device, in TextureDescription description, ID3D11Texture2D* existingHandle)
+        : base(device, description)
+    {
+        _handle = (ID3D11Resource*)existingHandle;
+        DxgiFormat = description.Format.ToDxgiFormat();
+    }
 
     public D3D11Texture(D3D11GraphicsDevice device, in TextureDescription description, void* initialData = default)
         : base(device, description)
@@ -77,20 +87,22 @@ internal sealed unsafe class D3D11Texture : Texture
             pInitialData = &subresourceData;
         }
 
-        HResult hr = device.NativeDevice->CreateTexture2D(&d3dDesc, pInitialData, _handle.GetAddressOf());
+        ID3D11Texture2D* tex2D = default;
+        HResult hr = device.NativeDevice->CreateTexture2D(&d3dDesc, pInitialData, &tex2D);
         if (hr.Failure)
         {
             throw new InvalidOperationException("D3D11: Failed to create texture");
         }
+        _handle = (ID3D11Resource*)tex2D;
 
         if (!string.IsNullOrEmpty(description.Label))
         {
-            _handle.Get()->SetDebugName(description.Label);
+            _handle->SetDebugName(description.Label);
         }
 
         if (d3dDesc.MipLevels == 0)
         {
-            _handle.Get()->GetDesc(&d3dDesc);
+            ((ID3D11Texture2D*)_handle)->GetDesc(&d3dDesc);
             MipLevels = (int)d3dDesc.MipLevels;
         }
 
@@ -122,14 +134,26 @@ internal sealed unsafe class D3D11Texture : Texture
 
         if (disposing)
         {
+            foreach (KeyValuePair<int, ComPtr<ID3D11RenderTargetView>> kvp in _rtvs)
+            {
+                kvp.Value.Dispose();
+            }
+
+            foreach (KeyValuePair<int, ComPtr<ID3D11DepthStencilView>> kvp in _dsvs)
+            {
+                kvp.Value.Dispose();
+            }
+
             foreach (KeyValuePair<int, ComPtr<ID3D11UnorderedAccessView>> kvp in _uavs)
             {
                 kvp.Value.Dispose();
             }
 
+            _rtvs.Clear();
+            _dsvs.Clear();
             _uavs.Clear();
             _srv.Dispose();
-            _handle.Dispose();
+            _handle->Release();
         }
     }
 
@@ -139,8 +163,148 @@ internal sealed unsafe class D3D11Texture : Texture
     }
 
     public Format DxgiFormat { get; }
-    public ID3D11Resource* Handle => (ID3D11Resource*)_handle.Get();
+    public ID3D11Resource* Handle => _handle;
     public ID3D11ShaderResourceView* SRV => _srv;
+
+    internal ID3D11RenderTargetView* GetRTV(int mipLevel, int slice)
+    {
+        lock (_rtvLock)
+        {
+            int hashCode = HashCode.Combine(mipLevel, slice);
+
+            if (!_rtvs.TryGetValue(hashCode, out ComPtr<ID3D11RenderTargetView> rtv))
+            {
+                RenderTargetViewDescription viewDesc = new()
+                {
+                    Format = DxgiFormat
+                };
+
+                switch (Dimension)
+                {
+                    case TextureDimension.Texture2D:
+                        if (SampleCount > 1)
+                        {
+                            if (ArrayLayers > 1)
+                            {
+                                viewDesc.ViewDimension = RtvDimension.Texture2DMsArray;
+                                if (slice != -1)
+                                {
+                                    viewDesc.Texture2DMSArray.ArraySize = 1;
+                                    viewDesc.Texture2DMSArray.FirstArraySlice = (uint)slice;
+                                }
+                                else
+                                {
+                                    viewDesc.Texture2DMSArray.ArraySize = (uint)ArrayLayers;
+                                }
+                            }
+                            else
+                            {
+                                viewDesc.ViewDimension = RtvDimension.Texture2DMs;
+                            }
+                        }
+                        else
+                        {
+                            if (ArrayLayers > 1)
+                            {
+                                viewDesc.ViewDimension = RtvDimension.Texture2DArray;
+                                viewDesc.Texture2DArray.MipSlice = (uint)mipLevel;
+                                if (slice != -1)
+                                {
+                                    viewDesc.Texture2DArray.ArraySize = 1;
+                                    viewDesc.Texture2DArray.FirstArraySlice = (uint)slice;
+                                }
+                                else
+                                {
+                                    viewDesc.Texture2DArray.ArraySize = (uint)ArrayLayers;
+                                }
+                            }
+                            else
+                            {
+                                viewDesc.ViewDimension = RtvDimension.Texture2D;
+                                viewDesc.Texture2D.MipSlice = (uint)mipLevel;
+                            }
+                        }
+
+                        break;
+                }
+
+                ThrowIfFailed(((D3D11GraphicsDevice)Device).NativeDevice->CreateRenderTargetView(Handle, &viewDesc, rtv.GetAddressOf()));
+                _rtvs.Add(hashCode, rtv);
+            }
+
+            return rtv.Get();
+        }
+    }
+
+    internal ID3D11DepthStencilView* GetDSV(int mipLevel, int slice)
+    {
+        lock (_rtvLock)
+        {
+            int hashCode = HashCode.Combine(mipLevel, slice);
+
+            if (!_dsvs.TryGetValue(hashCode, out ComPtr<ID3D11DepthStencilView> dsv))
+            {
+                DepthStencilViewDescription viewDesc = new()
+                {
+                    Format = DxgiFormat
+                };
+
+                switch (Dimension)
+                {
+                    case TextureDimension.Texture2D:
+                        if (SampleCount > 1)
+                        {
+                            if (ArrayLayers > 1)
+                            {
+                                viewDesc.ViewDimension = DsvDimension.Texture2DMsArray;
+                                if (slice != -1)
+                                {
+                                    viewDesc.Texture2DMSArray.ArraySize = 1;
+                                    viewDesc.Texture2DMSArray.FirstArraySlice = (uint)slice;
+                                }
+                                else
+                                {
+                                    viewDesc.Texture2DMSArray.ArraySize = (uint)ArrayLayers;
+                                }
+                            }
+                            else
+                            {
+                                viewDesc.ViewDimension = DsvDimension.Texture2DMs;
+                            }
+                        }
+                        else
+                        {
+                            if (ArrayLayers > 1)
+                            {
+                                viewDesc.ViewDimension = DsvDimension.Texture2DArray;
+                                viewDesc.Texture2DArray.MipSlice = (uint)mipLevel;
+                                if (slice != -1)
+                                {
+                                    viewDesc.Texture2DArray.ArraySize = 1;
+                                    viewDesc.Texture2DArray.FirstArraySlice = (uint)slice;
+                                }
+                                else
+                                {
+                                    viewDesc.Texture2DArray.ArraySize = (uint)ArrayLayers;
+                                }
+                            }
+                            else
+                            {
+                                viewDesc.ViewDimension = DsvDimension.Texture2D;
+                                viewDesc.Texture2D.MipSlice = (uint)mipLevel;
+                            }
+                        }
+
+                        break;
+                }
+
+                ThrowIfFailed(((D3D11GraphicsDevice)Device).NativeDevice->CreateDepthStencilView(Handle, &viewDesc, dsv.GetAddressOf()));
+                _dsvs.Add(hashCode, dsv);
+            }
+
+            return dsv.Get();
+        }
+    }
 
     internal ID3D11UnorderedAccessView* GetUAV(int mipLevel)
     {
@@ -174,5 +338,4 @@ internal sealed unsafe class D3D11Texture : Texture
             return uav.Get();
         }
     }
-
 }

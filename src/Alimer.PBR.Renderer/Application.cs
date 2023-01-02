@@ -10,7 +10,6 @@ using Alimer.Graphics.D3D11;
 using Vortice.Mathematics;
 using static Alimer.Bindings.SDL.SDL;
 using static Alimer.Bindings.SDL.SDL.SDL_EventType;
-using static Alimer.Bindings.SDL.SDL.SDL_LogPriority;
 using static Alimer.Bindings.SDL.SDL.SDL_WindowFlags;
 
 namespace Alimer.PBR.Renderer;
@@ -24,8 +23,10 @@ public sealed class Application : GraphicsObject
     private readonly SDL_Window _window;
     private bool _exitRequested;
     private ViewSettings _viewSettings;
-    private readonly FrameBuffer _framebuffer;
-    private readonly FrameBuffer _resolveFramebuffer;
+
+    private readonly Texture _fboColorTexture;
+    private readonly Texture _fboDepthStencilTexture;
+    private readonly Texture _fboResolveColorTexture;
 
     private readonly Sampler _defaultSampler;
     private readonly Sampler _computeSampler;
@@ -68,19 +69,27 @@ public sealed class Application : GraphicsObject
         _graphicsDevice = GraphicsDevice.CreateDefault(_window, maxSamples);
         _viewSettings = new(0.0f, 0.0f, 150.0f, 45.0f);
 
-        _framebuffer = AddDisposable(_graphicsDevice.CreateFrameBuffer(new Size(width, height),
-            _graphicsDevice.Samples, TextureFormat.Rgba16Float, TextureFormat.Depth32FloatStencil8)
-            );
+        TextureUsage colorTextureUsage = TextureUsage.RenderTarget;
+        if (_graphicsDevice.Samples <= 1)
+        {
+            colorTextureUsage |= TextureUsage.ShaderRead;
+        }
+
+        TextureDescription colorTextureDesc = TextureDescription.Texture2D(TextureFormat.Rgba16Float, width, height, 1, 1, colorTextureUsage, _graphicsDevice.Samples);
+        TextureDescription depthStencilTextureDesc = TextureDescription.Texture2D(TextureFormat.Depth32FloatStencil8, width, height, 1, 1, TextureUsage.RenderTarget, _graphicsDevice.Samples);
+
+        _fboColorTexture = AddDisposable(_graphicsDevice.CreateTexture(colorTextureDesc));
+        _fboDepthStencilTexture = AddDisposable(_graphicsDevice.CreateTexture(depthStencilTextureDesc));
 
         if (_graphicsDevice.Samples > 1)
         {
-            _resolveFramebuffer = AddDisposable(
-                _graphicsDevice.CreateFrameBuffer(new Size(width, height), 1, TextureFormat.Rgba16Float, TextureFormat.Invalid)
-                );
+            TextureDescription resolveColorTextureDesc = TextureDescription.Texture2D(TextureFormat.Rgba16Float, width, height, 1, 1,
+                TextureUsage.ShaderRead | TextureUsage.RenderTarget, 1);
+            _fboResolveColorTexture = AddDisposable(_graphicsDevice.CreateTexture(resolveColorTextureDesc));
         }
         else
         {
-            _resolveFramebuffer = _framebuffer;
+            _fboResolveColorTexture = _fboColorTexture;
         }
 
         SamplerDescription samplerDesc = new()
@@ -276,24 +285,40 @@ public sealed class Application : GraphicsObject
         context.SetConstantBuffer(0, _transformCB.Buffer);
 
         // Prepare framebuffer for rendering.
-        //context.SetRenderTarget(_framebuffer);
+        RenderPassColorAttachment colorAttachment = new(_fboColorTexture)
+        {
+            ResolveTexture = (_fboColorTexture != _fboResolveColorTexture) ? _fboResolveColorTexture : _fboColorTexture,
+        };
+        RenderPassDepthStencilAttachment depthStencilAttachment = new(_fboDepthStencilTexture);
+        RenderPassDescriptor renderPass = new(depthStencilAttachment, colorAttachment)
+        {
+            Label = "Main Pass"
+        };
 
-        context.SetRenderTarget(null);
-
-        // Draw skybox.
-        context.SetPipeline(_skyboxPipeline);
-        context.SetVertexBuffer(0, _skybox.VertexBuffer);
-        context.SetIndexBuffer(_skybox.IndexBuffer, 0, IndexType.Uint16);
-        context.SetSRV(0, _envTexture);
-        context.SetSampler(0, _defaultSampler);
-        context.DrawIndexed(_skybox.IndexCount, 1);
+        using (context.PushScopedPassPass(renderPass))
+        {
+            // Draw skybox.
+            context.SetPipeline(_skyboxPipeline);
+            context.SetVertexBuffer(0, _skybox.VertexBuffer);
+            context.SetIndexBuffer(_skybox.IndexBuffer, 0, IndexType.Uint16);
+            context.SetSRV(0, _envTexture);
+            context.SetSampler(0, _defaultSampler);
+            context.DrawIndexed(_skybox.IndexCount, 1);
+        }
 
         // Draw a full screen triangle for postprocessing/tone mapping.
-        context.SetRenderTarget(null);
-        //context.SetPipeline(_tonemapPipeline);
-        //context.SetSRV(0, _resolveFramebuffer.srv);
-        //context.SetSampler(0, _computeSampler);
-        //context.Draw(3);
+        RenderPassDescriptor backBufferRenderPass = new(new RenderPassColorAttachment(_graphicsDevice.ColorTexture))
+        {
+            Label = "BackBuffer"
+        };
+
+        using (context.PushScopedPassPass(backBufferRenderPass))
+        {
+            context.SetPipeline(_tonemapPipeline);
+            context.SetSRV(0, _fboResolveColorTexture);
+            context.SetSampler(0, _computeSampler);
+            context.Draw(3);
+        }
 
         _graphicsDevice.EndFrame();
     }
