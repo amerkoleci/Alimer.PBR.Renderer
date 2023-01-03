@@ -3,9 +3,10 @@
 
 // Environment skybox.
 
+#include "Alimer.hlsli"
+
 cbuffer TransformConstants : register(b0)
 {
-	float4x4 viewProjectionMatrix;
 	float4x4 skyProjectionMatrix;
 	float4x4 sceneRotationMatrix;
 };

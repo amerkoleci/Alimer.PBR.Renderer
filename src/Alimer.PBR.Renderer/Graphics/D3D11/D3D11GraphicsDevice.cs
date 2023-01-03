@@ -2,6 +2,7 @@
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using System.Drawing;
+using System.Text;
 using Alimer.Bindings.SDL;
 using CommunityToolkit.Diagnostics;
 using Win32;
@@ -307,7 +308,9 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
         return new D3D11Pipeline(this, description);
     }
 
-    public static ReadOnlyMemory<byte> CompileBytecode(string shaderSource, string entryPoint, string profile)
+    private static readonly D3DIncludeHandler* s_D3DIncludeHandler = D3DIncludeHandler.Create();
+
+    public static ReadOnlyMemory<byte> CompileBytecode(string shaderSource, string entryPoint, string profile, string? sourceName = default)
     {
         CompileFlags shaderFlags = CompileFlags.EnableStrictness;
 #if DEBUG
@@ -317,15 +320,15 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
         shaderFlags |= CompileFlags.OptimizationLevel3;
 #endif
 
-        using ComPtr<ID3DBlob> bytecode = D3DCompile(shaderSource, entryPoint, profile, shaderFlags);
-        Span<byte> result = new byte[bytecode.Get()->GetBufferSize()];
-        new Span<byte>(bytecode.Get()->GetBufferPointer(), (int)bytecode.Get()->GetBufferSize()).CopyTo(result);
-        return result.ToArray();
-#if TODO
+        if(!string.IsNullOrEmpty(sourceName))
+        {
+            D3DIncludeHandler.IncludeDirectory = Path.GetDirectoryName(sourceName);
+        }
 
         var shaderSourceUtf8 = Encoding.UTF8.GetBytes(shaderSource);
         var entryPointUtf8 = Encoding.UTF8.GetBytes(entryPoint);
         var profileUtf8 = Encoding.UTF8.GetBytes(profile);
+        byte[] sourceNameUtf8 = string.IsNullOrEmpty(sourceName) ? Array.Empty<byte>() : Encoding.UTF8.GetBytes(sourceName);
 
         using ComPtr<ID3DBlob> d3dBlobBytecode = default;
         using ComPtr<ID3DBlob> d3dBlobErrors = default;
@@ -333,13 +336,14 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
         fixed (byte* sourcePtr = shaderSourceUtf8)
         fixed (byte* entryPointPtr = entryPointUtf8)
         fixed (byte* targetPtr = profileUtf8)
+        fixed (byte* sourceNamePtr = sourceNameUtf8)
         {
             HResult hr = D3DCompile(
                 pSrcData: sourcePtr,
                 SrcDataSize: (nuint)shaderSourceUtf8.Length,
-                pSourceName: null,
+                pSourceName: string.IsNullOrEmpty(sourceName) ? (sbyte*)sourceNamePtr : null,
                 pDefines: null,
-                pInclude: D3D_COMPILE_STANDARD_FILE_INCLUDE,
+                pInclude: (ID3DInclude*)s_D3DIncludeHandler,
                 pEntrypoint: (sbyte*)entryPointPtr,
                 pTarget: (sbyte*)targetPtr,
                 Flags1: shaderFlags,
@@ -363,9 +367,6 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
             new Span<byte>(d3dBlobBytecode.Get()->GetBufferPointer(), (int)d3dBlobBytecode.Get()->GetBufferSize()).CopyTo(result);
             return result.ToArray();
         }
-
-#endif
-
     }
 
 #if DEBUG

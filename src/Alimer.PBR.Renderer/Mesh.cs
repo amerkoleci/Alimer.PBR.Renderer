@@ -27,10 +27,10 @@ public sealed class Mesh : GraphicsObject
     }
 
 
-    private Mesh(GraphicsDevice graphicsDevice, List<VertexMesh> vertices, List<uint> indices)
+    private Mesh(GraphicsDevice graphicsDevice, List<VertexMesh> vertices, uint[] indices)
     {
         VertexBuffer = AddDisposable(graphicsDevice.CreateBuffer(vertices.ToArray(), BufferUsage.Vertex));
-        IndexCount = indices.Count;
+        IndexCount = indices.Length;
 
         IndexType = vertices.Count > 65536 ? IndexType.Uint32 : IndexType.Uint16;
         if (IndexType == IndexType.Uint32)
@@ -39,13 +39,13 @@ public sealed class Mesh : GraphicsObject
         }
         else
         {
-            List<ushort> shortIndices = new(indices.Count);
-            for (int i = 0; i < indices.Count; ++i)
+            Span<ushort> shortIndices = stackalloc ushort[indices.Length];
+            for (int i = 0; i < indices.Length; ++i)
             {
-                shortIndices.Add((ushort)indices[i]);
+                shortIndices[i] = (ushort)indices[i];
             }
 
-            IndexBuffer = AddDisposable(graphicsDevice.CreateBuffer(shortIndices.ToArray(), BufferUsage.Index));
+            IndexBuffer = AddDisposable(graphicsDevice.CreateBuffer(shortIndices, BufferUsage.Index));
         }
     }
 
@@ -60,6 +60,12 @@ public sealed class Mesh : GraphicsObject
         return FromStream(graphicsDevice, stream);
     }
 
+    public static Mesh FromGlbFile(GraphicsDevice graphicsDevice, string filePath)
+    {
+        using FileStream stream = new(filePath, FileMode.Open);
+        return FromGlbStream(graphicsDevice, stream);
+    }
+
     public static Mesh FromStream(GraphicsDevice graphicsDevice, Stream stream)
     {
         if (stream is MemoryStream memoryStream)
@@ -70,6 +76,69 @@ public sealed class Mesh : GraphicsObject
             stream.CopyTo(newStream);
             return FromMemory(graphicsDevice, newStream.ToArray());
         }
+    }
+
+    public static Mesh FromGlbStream(GraphicsDevice graphicsDevice, Stream stream)
+    {
+        var sharpModel = SharpGLTF.Schema2.ModelRoot.ReadGLB(stream);
+
+        List<VertexMesh> vertices = new();
+        uint[] indices = Array.Empty<uint>();
+        foreach (var mesh in sharpModel.LogicalMeshes)
+        {
+            foreach (var primitive in mesh.Primitives)
+            {
+                bool hasPosition = primitive.GetVertexAccessor("POSITION") is not null;
+                bool hasNormal = primitive.GetVertexAccessor("NORMAL") is not null;
+                bool hasTangent = primitive.GetVertexAccessor("TANGENT") is not null;
+                bool hasTexCoord0 = primitive.GetVertexAccessor("TEXCOORD_0") is not null;
+
+                Guard.IsTrue(hasPosition);
+                Guard.IsTrue(hasNormal);
+                Guard.IsTrue(hasTexCoord0);
+
+                IList<Vector3> positionAccessor = primitive.GetVertexAccessor("POSITION").AsVector3Array();
+                IList<Vector3> normalAccessor = primitive.GetVertexAccessor("NORMAL").AsVector3Array();
+                IList<Vector3>? tangentAccessor = hasTangent ? primitive.GetVertexAccessor("TANGENT").AsVector3Array() : default;
+                IList<Vector2> texcoordAccessor = primitive.GetVertexAccessor("TEXCOORD_0").AsVector2Array();
+                var indexAccessor = primitive.GetIndexAccessor().AsIndicesArray();
+
+                if (!hasTangent)
+                {
+                    Span<Vector4> tangents = VertexHelper.GenerateTangents(positionAccessor.ToArray(), texcoordAccessor.ToArray(), indexAccessor.ToArray());
+                    tangentAccessor = new List<Vector3>();
+                    for (int i = 0; i < positionAccessor.Count; ++i)
+                    {
+                        tangentAccessor.Add(new Vector3(tangents[i].X, tangents[i].Y, tangents[i].Z));
+                    }
+                }
+
+                for (int i = 0; i < positionAccessor.Count; ++i)
+                {
+                    Vector3 position = positionAccessor[i];
+                    Vector3 normal = normalAccessor[i];
+                    Vector3 tangent = hasTangent ? tangentAccessor[i]! : Vector3.Zero;
+                    Vector3 bitangent = Vector3.Zero;
+                    Vector2 texcoord = texcoordAccessor[i];
+
+                    vertices.Add(new VertexMesh(position, normal, tangent, bitangent, texcoord));
+                }
+
+              
+                // Indices
+                indices = new uint[indexAccessor.Count];
+
+                for (int i = 0; i < indices.Length; i++)
+                {
+                    indices[i] = indexAccessor[i];
+                }
+
+                // TODO: Material
+                //primitive.Material;
+            }
+        }
+
+        return new(graphicsDevice, vertices, indices);
     }
 
     public static unsafe Mesh FromMemory(GraphicsDevice graphicsDevice, byte[] data)
@@ -120,6 +189,6 @@ public sealed class Mesh : GraphicsObject
             indices.Add((uint)mesh->MFaces[i].MIndices[2]);
         }
 
-        return new(graphicsDevice, vertices, indices);
+        return new(graphicsDevice, vertices, indices.ToArray());
     }
 }

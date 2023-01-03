@@ -9,6 +9,7 @@ using System.Runtime.InteropServices;
 using Alimer.Bindings.SDL;
 using Alimer.Graphics;
 using Alimer.Graphics.D3D11;
+using CommunityToolkit.Diagnostics;
 using Vortice.Mathematics;
 using static Alimer.Bindings.SDL.SDL;
 using static Alimer.Bindings.SDL.SDL.SDL_EventType;
@@ -68,6 +69,7 @@ public sealed class Application : GraphicsObject
 
 
     private readonly ConstantBuffer<TransformCB> _transformCB;
+    private readonly ConstantBuffer<PerViewData> _perViewData;
     private readonly ConstantBuffer<ShadingCB> _shadingCB;
 
     public Size Size { get; private set; }
@@ -159,8 +161,10 @@ public sealed class Application : GraphicsObject
         _computeSampler = AddDisposable(_graphicsDevice.CreateSampler(samplerComputeSampler));
 
         _transformCB = AddDisposable(new ConstantBuffer<TransformCB>(_graphicsDevice, "Transform"));
+        _perViewData = AddDisposable(new ConstantBuffer<PerViewData>(_graphicsDevice, "PerView"));
         _shadingCB = AddDisposable(new ConstantBuffer<ShadingCB>(_graphicsDevice, "Shading"));
 
+        //_pbrMesh = AddDisposable(MeshFromGlbFile("DamagedHelmet.glb"));
         _pbrMesh = AddDisposable(MeshFromFile("cerberus.fbx"));
         _albedoTexture = AddDisposable(CreateTexture(ImageFromFile("cerberus_A.png"), TextureFormat.Rgba8UnormSrgb));
         _normalTexture = AddDisposable(CreateTexture(ImageFromFile("cerberus_N.png"), TextureFormat.Rgba8Unorm));
@@ -169,8 +173,8 @@ public sealed class Application : GraphicsObject
 
         RenderPipelineDescription pbrPipelineDesc = new()
         {
-            VertexShader = CompileShader("pbr.hlsl", "main_vs", "vs_5_0"),
-            FragmentShader = CompileShader("pbr.hlsl", "main_ps", "ps_5_0"),
+            VertexShader = CompileShader("pbr.hlsl", "vertexMain", "vs_5_0"),
+            FragmentShader = CompileShader("pbr.hlsl", "fragmentMain", "ps_5_0"),
             VertexDescriptor = new(new VertexLayoutDescriptor((uint)VertexMesh.SizeInBytes, VertexMesh.Attributes))
         };
         _pbrPipeline = AddDisposable(_graphicsDevice.CreateRenderPipeline(pbrPipelineDesc));
@@ -324,12 +328,17 @@ public sealed class Application : GraphicsObject
         return Mesh.FromFile(_graphicsDevice, Path.Combine(AppContext.BaseDirectory, "assets", "meshes", fileName));
     }
 
+    private Mesh MeshFromGlbFile(string fileName)
+    {
+        return Mesh.FromGlbFile(_graphicsDevice, Path.Combine(AppContext.BaseDirectory, "assets", "meshes", fileName));
+    }
+
     private static ReadOnlyMemory<byte> CompileShader(string fileName, string entryPoint, string profile)
     {
         string filePath = Path.Combine(AppContext.BaseDirectory, "assets", "shaders", "hlsl", fileName);
         string shaderSource = File.ReadAllText(filePath);
 
-        return D3D11GraphicsDevice.CompileBytecode(shaderSource, entryPoint, profile);
+        return D3D11GraphicsDevice.CompileBytecode(shaderSource, entryPoint, profile, filePath);
     }
 
 
@@ -378,22 +387,36 @@ public sealed class Application : GraphicsObject
 
         CommandContext context = _graphicsDevice.DefaultContext;
 
-        // Matrix4x4 projectionMatrix = Matrix4x4.CreatePerspectiveFieldOfView(MathHelper.ToRadians(_viewSettings.FieldOfView), (float)Size.Width / Size.Height, 1.0f, 1000.0f);
-        Matrix4x4 projectionMatrix = perspectiveFovRH_NO(_viewSettings.FieldOfView, (float)Size.Width, Size.Height, 1.0f, 1000.0f);
+        Matrix4x4 projectionMatrix = Matrix4x4.CreatePerspectiveFieldOfView(MathHelper.ToRadians(_viewSettings.FieldOfView), (float)Size.Width / Size.Height, 1.0f, 1000.0f);
 
-        Matrix4x4 viewRotationMatrix = EulerAngleXY(MathHelper.ToRadians(_viewSettings.Pitch), MathHelper.ToRadians(_viewSettings.Yaw));
-        Matrix4x4 sceneRotationMatrix = EulerAngleXY(MathHelper.ToRadians(_scenePitch), MathHelper.ToRadians(_sceneYaw));
+        Matrix4x4 viewRotationMatrix = EulerAngleXY(_viewSettings.Pitch, _viewSettings.Yaw);
+        Matrix4x4 sceneRotationMatrix = EulerAngleXY(_scenePitch, _sceneYaw);
+
         Matrix4x4 viewMatrix = viewRotationMatrix * Matrix4x4.CreateTranslation(0.0f, 0.0f, -_viewSettings.Distance);
+        Matrix4x4 viewProjectionMatrix = Matrix4x4.Multiply(viewMatrix, projectionMatrix);
+
         Vector3 eyePosition = Vector3.Zero;
         if (Matrix4x4.Invert(viewMatrix, out Matrix4x4 inverseParentMatrix))
         {
             eyePosition = inverseParentMatrix.Translation;
         }
 
+        Guard.IsTrue(Matrix4x4.Invert(viewProjectionMatrix, out Matrix4x4 inverseProjectionMatrix));
+
+        // Update View data first
+        PerViewData viewData = new()
+        {
+            ViewMatrix = viewMatrix,
+            ProjectionMatrix = projectionMatrix,
+            ViewProjectionMatrix = viewProjectionMatrix,
+            InverseProjectionMatrix = inverseProjectionMatrix,
+            CameraPosition = new Vector4(eyePosition, 0.0f)
+        };
+        _perViewData.SetData(context, viewData);
+
         //context.UpdateConstantBuffer(spmapCB.Buffer, spmapConstants);
         TransformCB transformData = new()
         {
-            ViewProjectionMatrix = Matrix4x4.Multiply(viewMatrix, projectionMatrix),
             SkyProjectionMatrix = Matrix4x4.Multiply(viewRotationMatrix, projectionMatrix),
             SceneRotationMatrix = sceneRotationMatrix
         };
@@ -438,6 +461,7 @@ public sealed class Application : GraphicsObject
 
         context.SetConstantBuffer(0, _transformCB.Buffer);
         context.SetConstantBuffer(1, _shadingCB.Buffer);
+        context.SetConstantBuffer(PerViewData.Slot, _perViewData.Buffer);
 
         // Prepare framebuffer for rendering.
         RenderPassColorAttachment colorAttachment = new(_fboColorTexture)
@@ -597,33 +621,15 @@ public sealed class Application : GraphicsObject
     {
     }
 
-    private static Matrix4x4 perspectiveFovRH_NO(float fov, float width, float height, float zNear, float zFar)
-    {
-        //assert(width > static_cast<T>(0));
-        //assert(height > static_cast<T>(0));
-        //assert(fov > static_cast<T>(0));
-
-
-        float rad = fov;
-        float h = MathF.Cos(0.5f * rad) / MathF.Sin(0.5f * rad);
-        float w = h * height / width; ///todo max(width , Height) / min(width , Height)?
-
-        Matrix4x4 result = default;
-        result.M11 = w;
-        result.M22 = h;
-        result.M33 = -(zFar + zNear) / (zFar - zNear);
-        result.M34 = -1.0f;
-        result.M43 = -(2.0f * zFar * zNear) / (zFar - zNear);
-
-        return result;
-    }
-
     private static Matrix4x4 EulerAngleXY(float angleX, float angleY)
     {
-        float cosX = MathF.Cos(angleX);
-        float sinX = MathF.Sin(angleX);
-        float cosY = MathF.Cos(angleY);
-        float sinY = MathF.Sin(angleY);
+        float angleXRadians = MathHelper.ToRadians(angleX);
+        float angleYRadians = MathHelper.ToRadians(angleY);
+
+        float cosX = MathF.Cos(angleXRadians);
+        float sinX = MathF.Sin(angleXRadians);
+        float cosY = MathF.Cos(angleYRadians);
+        float sinY = MathF.Sin(angleYRadians);
 
         return new Matrix4x4(
             cosY, -sinX * -sinY, cosX * -sinY, 0.0f,
@@ -644,9 +650,20 @@ public sealed class Application : GraphicsObject
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     public struct TransformCB
     {
-        public Matrix4x4 ViewProjectionMatrix;
         public Matrix4x4 SkyProjectionMatrix;
         public Matrix4x4 SceneRotationMatrix;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    public struct PerViewData
+    {
+        public const int Slot = 2; // PER_VIEW_CBUFFER_SLOT
+
+        public Matrix4x4 ViewMatrix;
+        public Matrix4x4 ProjectionMatrix;
+        public Matrix4x4 ViewProjectionMatrix;
+        public Matrix4x4 InverseProjectionMatrix;
+        public Vector4 CameraPosition;
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 4)]

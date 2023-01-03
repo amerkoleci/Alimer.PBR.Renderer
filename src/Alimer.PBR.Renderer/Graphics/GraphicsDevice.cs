@@ -68,9 +68,22 @@ public abstract class GraphicsDevice : GraphicsObject
         CpuAccessMode cpuAccess = CpuAccessMode.None)
         where T : unmanaged
     {
-        ReadOnlySpan<T> dataSpan = initialData.AsSpan();
+        Span<T> dataSpan = initialData.AsSpan();
 
         return CreateBuffer(dataSpan, usage, cpuAccess);
+    }
+
+    public unsafe GraphicsBuffer CreateBuffer<T>(Span<T> initialData,
+        BufferUsage usage = BufferUsage.ShaderReadWrite,
+        CpuAccessMode cpuAccess = CpuAccessMode.None,
+        string? label = default)
+        where T : unmanaged
+    {
+        int typeSize = sizeof(T);
+        Guard.IsTrue(initialData.Length > 0, nameof(initialData));
+
+        BufferDescription description = new((uint)(initialData.Length * typeSize), usage, cpuAccess, label);
+        return CreateBuffer(description, ref MemoryMarshal.GetReference(initialData));
     }
 
     public unsafe GraphicsBuffer CreateBuffer<T>(ReadOnlySpan<T> initialData,

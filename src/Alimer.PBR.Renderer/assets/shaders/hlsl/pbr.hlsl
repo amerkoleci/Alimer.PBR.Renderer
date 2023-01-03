@@ -6,8 +6,7 @@
 // This implementation is based on "Real Shading in Unreal Engine 4" SIGGRAPH 2013 course notes by Epic Games.
 // See: http://blog.selfshadow.com/publications/s2013-shading-course/karis/s2013_pbs_epic_notes_v2.pdf
 
-static const float PI = 3.141592;
-static const float Epsilon = 0.00001;
+#include "Alimer.hlsli"
 
 static const uint NumLights = 3;
 
@@ -16,7 +15,6 @@ static const float3 Fdielectric = 0.04;
 
 cbuffer TransformConstants : register(b0)
 {
-	float4x4 viewProjectionMatrix;
 	float4x4 skyProjectionMatrix;
 	float4x4 sceneRotationMatrix;
 };
@@ -97,23 +95,26 @@ uint querySpecularTextureLevels()
 }
 
 // Vertex shader
-PixelShaderInput main_vs(in VertexInput vin)
+PixelShaderInput vertexMain(in VertexInput input)
 {
 	PixelShaderInput vout;
-	vout.position = mul(sceneRotationMatrix, float4(vin.position, 1.0)).xyz;
-	vout.texcoord = float2(vin.texcoord.x, 1.0-vin.texcoord.y);
+
+    float4 position = float4(input.position, 1.0f);
+
+	vout.position = mul(sceneRotationMatrix, position).xyz;
+	vout.texcoord = float2(input.texcoord.x, 1.0f - input.texcoord.y);
 
 	// Pass tangent space basis vectors (for normal mapping).
-	float3x3 TBN = float3x3(vin.tangent, vin.bitangent, vin.normal);
+	float3x3 TBN = float3x3(input.tangent, input.bitangent, input.normal);
 	vout.tangentBasis = mul((float3x3)sceneRotationMatrix, transpose(TBN));
-
+    
 	float4x4 mvpMatrix = mul(viewProjectionMatrix, sceneRotationMatrix);
-	vout.pixelPosition = mul(mvpMatrix, float4(vin.position, 1.0));
+	vout.pixelPosition = mul(mvpMatrix, position);
 	return vout;
 }
 
 // Pixel shader
-float4 main_ps(PixelShaderInput pin) : SV_Target
+float4 fragmentMain(PixelShaderInput pin) : SV_Target
 {
 	// Sample input textures to get shading model params.
 	float3 albedo = albedoTexture.Sample(defaultSampler, pin.texcoord).rgb;
