@@ -482,6 +482,7 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
             fixed (ID3D11Buffer** cbvsPtr = _constantBuffers)
             {
                 _context->VSSetConstantBuffers(0, _numCBVBindings, cbvsPtr);
+                _context->PSSetConstantBuffers(0, _numCBVBindings, cbvsPtr);
             }
         }
 

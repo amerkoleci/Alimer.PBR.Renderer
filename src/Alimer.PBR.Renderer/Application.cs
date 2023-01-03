@@ -1,8 +1,10 @@
 ﻿// Copyright © Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
+using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Alimer.Bindings.SDL;
 using Alimer.Graphics;
@@ -16,6 +18,9 @@ namespace Alimer.PBR.Renderer;
 
 public sealed class Application : GraphicsObject
 {
+    const float OrbitSpeed = 1.0f;
+    const float ZoomSpeed = 4.0f;
+
     private const int _eventsPerPeep = 64;
     private static readonly unsafe SDL_Event* _events = (SDL_Event*)NativeMemory.Alloc(_eventsPerPeep, (nuint)sizeof(SDL_Event));
 
@@ -27,6 +32,16 @@ public sealed class Application : GraphicsObject
     private float _sceneYaw = 0.0f;
     private const int _numLights = 3;
     private readonly Light[] _lights = new Light[_numLights];
+    private enum InputMode
+    {
+        None,
+        RotatingView,
+        RotatingScene,
+    }
+    private InputMode _mode;
+    private int _prevCursorX;
+    private int _prevCursorY;
+
 
     private readonly Texture _fboColorTexture;
     private readonly Texture _fboDepthStencilTexture;
@@ -53,6 +68,7 @@ public sealed class Application : GraphicsObject
 
 
     private readonly ConstantBuffer<TransformCB> _transformCB;
+    private readonly ConstantBuffer<ShadingCB> _shadingCB;
 
     public Size Size { get; private set; }
 
@@ -143,6 +159,7 @@ public sealed class Application : GraphicsObject
         _computeSampler = AddDisposable(_graphicsDevice.CreateSampler(samplerComputeSampler));
 
         _transformCB = AddDisposable(new ConstantBuffer<TransformCB>(_graphicsDevice, "Transform"));
+        _shadingCB = AddDisposable(new ConstantBuffer<ShadingCB>(_graphicsDevice, "Shading"));
 
         _pbrMesh = AddDisposable(MeshFromFile("cerberus.fbx"));
         _albedoTexture = AddDisposable(CreateTexture(ImageFromFile("cerberus_A.png"), TextureFormat.Rgba8UnormSrgb));
@@ -365,18 +382,62 @@ public sealed class Application : GraphicsObject
         Matrix4x4 projectionMatrix = perspectiveFovRH_NO(_viewSettings.FieldOfView, (float)Size.Width, Size.Height, 1.0f, 1000.0f);
 
         Matrix4x4 viewRotationMatrix = EulerAngleXY(MathHelper.ToRadians(_viewSettings.Pitch), MathHelper.ToRadians(_viewSettings.Yaw));
-        //viewRotationMatrix = Matrix4x4.Transpose(viewRotationMatrix);
-        //Matrix4x4 sceneRotationMatrix = EulerAngleXY(MathHelper.ToRadians(scene.pitch), glm::radians(scene.yaw));
+        Matrix4x4 sceneRotationMatrix = EulerAngleXY(MathHelper.ToRadians(_scenePitch), MathHelper.ToRadians(_sceneYaw));
+        Matrix4x4 viewMatrix = viewRotationMatrix * Matrix4x4.CreateTranslation(0.0f, 0.0f, -_viewSettings.Distance);
+        Vector3 eyePosition = Vector3.Zero;
+        if (Matrix4x4.Invert(viewMatrix, out Matrix4x4 inverseParentMatrix))
+        {
+            eyePosition = inverseParentMatrix.Translation;
+        }
 
         //context.UpdateConstantBuffer(spmapCB.Buffer, spmapConstants);
         TransformCB transformData = new()
         {
-            ViewProjectionMatrix = Matrix4x4.Multiply(viewRotationMatrix, projectionMatrix),
+            ViewProjectionMatrix = Matrix4x4.Multiply(viewMatrix, projectionMatrix),
             SkyProjectionMatrix = Matrix4x4.Multiply(viewRotationMatrix, projectionMatrix),
-            SceneRotationMatrix = Matrix4x4.Identity
+            SceneRotationMatrix = sceneRotationMatrix
         };
         _transformCB.SetData(context, transformData);
+
+        // Update shading constant buffer (for pixel shader).
+        {
+            ShadingCB shadingConstants = new();
+            shadingConstants.EyePosition = new Vector4(eyePosition, 0.0f);
+            for (int i = 0; i < _numLights; ++i)
+            {
+                ref Light light = ref _lights[i];
+                Vector4 radiance = Vector4.Zero;
+
+                if (light.Enabled)
+                {
+                    radiance = new Vector4(light.Radiance, 0.0f);
+                }
+
+                switch (i)
+                {
+                    case 0:
+                        shadingConstants.Light1.Direction = new Vector4(light.Direction, 0.0f);
+                        shadingConstants.Light1.Radiance = radiance;
+                        break;
+
+                    case 1:
+                        shadingConstants.Light2.Direction = new Vector4(light.Direction, 0.0f);
+                        shadingConstants.Light2.Radiance = radiance;
+                        break;
+
+                    case 2:
+                        shadingConstants.Light3.Direction = new Vector4(light.Direction, 0.0f);
+                        shadingConstants.Light3.Radiance = radiance;
+                        break;
+                }
+            }
+
+            _shadingCB.SetData(context, shadingConstants);
+        }
+
+
         context.SetConstantBuffer(0, _transformCB.Buffer);
+        context.SetConstantBuffer(1, _shadingCB.Buffer);
 
         // Prepare framebuffer for rendering.
         RenderPassColorAttachment colorAttachment = new(_fboColorTexture)
@@ -461,6 +522,74 @@ public sealed class Application : GraphicsObject
             case SDL_WINDOWEVENT:
                 HandleWindowEvent(evt);
                 break;
+
+            case SDL_MOUSEWHEEL:
+                _viewSettings.Distance += ZoomSpeed * -evt.wheel.y;
+                break;
+
+            case SDL_MOUSEBUTTONDOWN:
+                if (_mode == InputMode.None)
+                {
+                    if (evt.button.button == 1)
+                        _mode = InputMode.RotatingView;
+                    if (evt.button.button == 3)
+                        _mode = InputMode.RotatingScene;
+
+                    _prevCursorX = evt.button.x;
+                    _prevCursorY = evt.button.y;
+                    SDL_ShowCursor(0);
+                }
+                break;
+
+            case SDL_MOUSEBUTTONUP:
+                if (evt.button.button == 1)
+                    _mode = InputMode.None;
+                if (evt.button.button == 3)
+                    _mode = InputMode.None;
+                SDL_ShowCursor(1);
+                break;
+
+            case SDL_MOUSEMOTION:
+                if (_mode != InputMode.None)
+                {
+                    int dx = evt.button.x - _prevCursorX;
+                    int dy = evt.button.y - _prevCursorY;
+
+                    switch (_mode)
+                    {
+                        case InputMode.RotatingScene:
+                            _sceneYaw += OrbitSpeed * dx;
+                            _scenePitch += OrbitSpeed * dy;
+                            break;
+                        case InputMode.RotatingView:
+                            _viewSettings.Yaw += OrbitSpeed * dx;
+                            _viewSettings.Pitch += OrbitSpeed * dy;
+                            break;
+                    }
+
+                    _prevCursorX = evt.button.x;
+                    _prevCursorY = evt.button.y;
+                }
+                break;
+
+            case SDL_KEYDOWN:
+                if (evt.key.keysym.sym == SDL_Keycode.SDLK_F1)
+                {
+                    _lights[0].Enabled = !_lights[0].Enabled;
+                }
+                else if (evt.key.keysym.sym == SDL_Keycode.SDLK_F2)
+                {
+                    _lights[1].Enabled = !_lights[1].Enabled;
+                }
+                else if (evt.key.keysym.sym == SDL_Keycode.SDLK_F3)
+                {
+                    _lights[2].Enabled = !_lights[2].Enabled;
+                }
+                break;
+
+            case SDL_KEYUP:
+                break;
+
         }
     }
 
@@ -518,6 +647,40 @@ public sealed class Application : GraphicsObject
         public Matrix4x4 ViewProjectionMatrix;
         public Matrix4x4 SkyProjectionMatrix;
         public Matrix4x4 SceneRotationMatrix;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    public struct LightCB
+    {
+        public Vector4 Direction;
+        public Vector4 Radiance;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    public struct ShadingCB
+    {
+        public LightCB Light1;
+        public LightCB Light2;
+        public LightCB Light3;
+
+        [UnscopedRef]
+        public ref LightCB this[int index]
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get
+            {
+                return ref AsSpan()[index];
+            }
+        }
+
+        [UnscopedRef]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Span<LightCB> AsSpan()
+        {
+            return MemoryMarshal.CreateSpan(ref Light1, 3);
+        }
+
+        public Vector4 EyePosition;
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 4)]

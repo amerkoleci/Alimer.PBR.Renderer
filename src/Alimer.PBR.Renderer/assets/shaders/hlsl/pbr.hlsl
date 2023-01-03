@@ -21,7 +21,7 @@ cbuffer TransformConstants : register(b0)
 	float4x4 sceneRotationMatrix;
 };
 
-cbuffer ShadingConstants : register(b0)
+cbuffer ShadingConstants : register(b1)
 {
 	struct {
 		float3 direction;

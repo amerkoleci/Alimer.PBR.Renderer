@@ -3,4 +3,4 @@
 
 namespace Alimer.PBR.Renderer;
 
-public readonly record struct ViewSettings(float Pitch, float Yaw, float Distance, float FieldOfView);
+public record struct ViewSettings(float Pitch, float Yaw, float Distance, float FieldOfView);
