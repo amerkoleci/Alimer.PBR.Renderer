@@ -2,7 +2,7 @@
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using Win32;
-using Win32.Graphics.Direct3D11;
+using Win32.Graphics.Direct3D12;
 using static Win32.Apis;
 using D3DPrimitiveTopology = Win32.Graphics.Direct3D.PrimitiveTopology;
 
@@ -10,25 +10,37 @@ namespace Alimer.Graphics.D3D12;
 
 internal sealed unsafe class D3D12Pipeline : Pipeline
 {
-    private readonly ComPtr<ID3D11VertexShader> _vs = default;
-    private readonly ComPtr<ID3D11PixelShader> _ps = default;
-    private readonly ComPtr<ID3D11InputLayout> _inputLayout = default;
+    private readonly ID3D12RootSignature* _rootSignature = default;
+    private readonly ComPtr<ID3D12PipelineState> _handle = default;
     private readonly uint _numVertexBindings = 0;
     private readonly uint[] _strides = new uint[8];
-
-    private readonly ComPtr<ID3D11BlendState> _blendState = default;
-    private readonly ComPtr<ID3D11RasterizerState> _rasterizerState = default;
-    private readonly ComPtr<ID3D11DepthStencilState> _depthStencilState = default;
-
-    private readonly ComPtr<ID3D11ComputeShader> _cs = default;
 
     public D3D12Pipeline(D3D12GraphicsDevice device, in ComputePipelineDescription description)
         : base(device, description)
     {
-        //if (device.NativeDevice->CreateComputeShader(description.ComputeShader.Span, null, _cs.GetAddressOf()).Failure)
-        //{
-        //    throw new InvalidOperationException("Failed to create compute shader from compiled bytecode");
-        //}
+        _rootSignature = device.ComputeRootSignature;
+
+        ComputePipelineStateDescription d3dDesc = new()
+        {
+            pRootSignature = _rootSignature,
+            CS = new ShaderBytecode
+            {
+                pShaderBytecode = UnsafeUtilities.GetPointer(description.ComputeShader.Span),
+                BytecodeLength = (nuint)description.ComputeShader.Length
+            }
+        };
+
+        if (device.NativeDevice->CreateComputePipelineState(&d3dDesc,
+            __uuidof<ID3D12PipelineState>(),
+           _handle.GetVoidAddressOf()).Failure)
+        {
+            throw new InvalidOperationException("D3D12: Failed to create compute pipeline");
+        }
+
+        if (!string.IsNullOrEmpty(description.Label))
+        {
+            _handle.Get()->SetName(description.Label);
+        }
     }
 
     public D3D12Pipeline(D3D12GraphicsDevice device, in RenderPipelineDescription description)
@@ -144,20 +156,19 @@ internal sealed unsafe class D3D12Pipeline : Pipeline
         //};
         //ThrowIfFailed(device.NativeDevice->CreateDepthStencilState(&depthStencilDesc, _depthStencilState.GetAddressOf()));
 
+        if (!string.IsNullOrEmpty(description.Label))
+        {
+            //_handle.Get()->SetName(description.Label);
+        }
+
         PrimitiveTopology = description.PrimitiveTopology.ToD3DPrimitiveTopology();
     }
 
-    public ID3D11VertexShader* VS => _vs;
-    public ID3D11PixelShader* PS => _ps;
-    public ID3D11InputLayout* InputLayout => _inputLayout;
+    public ID3D12RootSignature* RootSignature => _rootSignature;
+    public ID3D12PipelineState* Handle => _handle;
+    public D3DPrimitiveTopology PrimitiveTopology { get; }
     public uint NumVertexBindings => _numVertexBindings;
     public uint* Strides => UnsafeUtilities.GetPointer(_strides.AsSpan());
-
-    public ID3D11BlendState* BlendState => _blendState;
-    public ID3D11RasterizerState* RasterizerState => _rasterizerState;
-    public ID3D11DepthStencilState* DepthStencilState => _depthStencilState;
-    public D3DPrimitiveTopology PrimitiveTopology { get; }
-    public ID3D11ComputeShader* CS => _cs;
 
     protected override void Dispose(bool disposing)
     {
@@ -165,14 +176,13 @@ internal sealed unsafe class D3D12Pipeline : Pipeline
 
         if (disposing)
         {
-            _cs.Dispose();
-
-            _vs.Dispose();
-            _ps.Dispose();
-            _inputLayout.Dispose();
-            _blendState.Dispose();
-            _rasterizerState.Dispose();
-            _depthStencilState.Dispose();
+           // _rootSignature.Dispose();
+            _handle.Dispose();
         }
+    }
+
+    protected override void OnLabelChanged(string newLabel)
+    {
+        _handle.Get()->SetName(newLabel);
     }
 }

@@ -276,23 +276,29 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
 
     public override void SetPipeline(Pipeline pipeline)
     {
-        D3D12Pipeline d3d11Pipeline = (D3D12Pipeline)pipeline;
-        if (_currentPipeline == d3d11Pipeline)
+        D3D12Pipeline d3d12Pipeline = (D3D12Pipeline)pipeline;
+        if (_currentPipeline == d3d12Pipeline)
             return;
 
-        _currentPipeline = d3d11Pipeline;
+        _currentPipeline = d3d12Pipeline;
 
-        if (d3d11Pipeline.PipelineType == PipelineType.Render)
+        if (d3d12Pipeline.PipelineType == PipelineType.Render)
         {
-            if (_currentPrimitiveTopology != d3d11Pipeline.PrimitiveTopology)
+            //_commandList.Get()->SetGraphicsRootSignature(d3d12Pipeline.RootSignature);
+
+            if (_currentPrimitiveTopology != d3d12Pipeline.PrimitiveTopology)
             {
-                _currentPrimitiveTopology = d3d11Pipeline.PrimitiveTopology;
-                _commandList.Get()->IASetPrimitiveTopology(d3d11Pipeline.PrimitiveTopology);
+                _currentPrimitiveTopology = d3d12Pipeline.PrimitiveTopology;
+                //_commandList.Get()->IASetPrimitiveTopology(d3d12Pipeline.PrimitiveTopology);
             }
         }
-        else if (d3d11Pipeline.PipelineType == PipelineType.Compute)
+        else if (d3d12Pipeline.PipelineType == PipelineType.Compute)
         {
+            _commandList.Get()->SetComputeRootSignature(d3d12Pipeline.RootSignature);
+            _commandList.Get()->SetPipelineState(d3d12Pipeline.Handle);
         }
+
+        //_commandList.Get()->SetPipelineState(d3d12Pipeline.Handle);
     }
 
     public override void SetVertexBuffer(uint slot, GraphicsBuffer buffer, uint offset = 0)
@@ -383,21 +389,21 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
     public override void Dispatch(int groupCountX, int groupCountY, int groupCountZ)
     {
         PrepareDispatch();
-        _commandList.Get()->Dispatch((uint)groupCountX, (uint)groupCountY, (uint)groupCountZ);
+        //_commandList.Get()->Dispatch((uint)groupCountX, (uint)groupCountY, (uint)groupCountZ);
     }
 
     public override void Draw(int vertexCount, int instanceCount = 1, int firstVertex = 0, int firstInstance = 0)
     {
         PrepareDraw();
 
-        _commandList.Get()->DrawInstanced((uint)vertexCount, (uint)instanceCount, (uint)firstVertex, (uint)firstInstance);
+       // _commandList.Get()->DrawInstanced((uint)vertexCount, (uint)instanceCount, (uint)firstVertex, (uint)firstInstance);
     }
 
     public override void DrawIndexed(int indexCount, int instanceCount = 1, int firstIndex = 0, int baseVertex = 0, int firstInstance = 0)
     {
         PrepareDraw();
 
-        _commandList.Get()->DrawIndexedInstanced((uint)indexCount, (uint)instanceCount, (uint)firstIndex, baseVertex, (uint)firstInstance);
+        //_commandList.Get()->DrawIndexedInstanced((uint)indexCount, (uint)instanceCount, (uint)firstIndex, baseVertex, (uint)firstInstance);
     }
 
     private void PrepareDispatch()

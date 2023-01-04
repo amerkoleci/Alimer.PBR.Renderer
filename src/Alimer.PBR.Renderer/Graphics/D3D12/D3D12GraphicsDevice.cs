@@ -3,7 +3,6 @@
 
 using System.Drawing;
 using Alimer.Bindings.SDL;
-using CommunityToolkit.Diagnostics;
 using Win32;
 using Win32.Graphics.Direct3D;
 using Win32.Graphics.Direct3D12;
@@ -17,6 +16,8 @@ using static Win32.Graphics.Dxgi.Apis;
 using Feature = Win32.Graphics.Direct3D12.Feature;
 using InfoQueueFilter = Win32.Graphics.Direct3D12.InfoQueueFilter;
 using MessageId = Win32.Graphics.Direct3D12.MessageId;
+using D3D12SamplerDescription = Win32.Graphics.Direct3D12.SamplerDescription;
+using CommunityToolkit.Diagnostics;
 
 namespace Alimer.Graphics.D3D12;
 
@@ -28,19 +29,27 @@ public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
     private readonly bool _isTearingSupported;
     private readonly ComPtr<ID3D12Device> _device;
     private readonly ComPtr<ID3D12CommandQueue> _graphicsQueue;
+    private readonly ComPtr<ID3D12Fence> _frameFence;
+    private readonly ulong[] _fenceValues = new ulong[NumFramesInFlight];
+    private uint _frameIndex;
 
-    private readonly FeatureLevel _featureLevel = FeatureLevel.Level_9_1;
+    private readonly RootSignatureVersion _rootSignatureVersion = RootSignatureVersion.V1_0;
+    private readonly FeatureLevel _featureLevel = FeatureLevel.Level_11_0;
+
+    private readonly ComPtr<ID3D12RootSignature> _computeRootSignature;
+
     private readonly ComPtr<IDXGISwapChain3> _swapChain;
-    private D3D12Texture? _colorTexture;
+    private readonly D3D12Texture[] _colorTextures = new D3D12Texture[NumFramesInFlight];
 
     public Size Size { get; private set; }
     public TextureFormat ColorFormat { get; } = TextureFormat.Bgra8Unorm;
     public ID3D12Device* NativeDevice => _device;
     public ID3D12CommandQueue* GraphicsQueue => _graphicsQueue;
+    public ID3D12RootSignature* ComputeRootSignature => _computeRootSignature;
 
     public override CommandContext DefaultContext { get; }
 
-    public override Texture ColorTexture => _colorTexture!;
+    public override Texture ColorTexture => _colorTextures[_frameIndex]!;
 
     public override TextureSampleCount SampleCount { get; }
 
@@ -194,8 +203,45 @@ public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
             _graphicsQueue.GetVoidAddressOf())
             );
 
+        ThrowIfFailed(_device.Get()->CreateFence(
+            0,
+            FenceFlags.None,
+            __uuidof<ID3D12Fence>(),
+            _frameFence.GetVoidAddressOf())
+            );
+
         DefaultContext = new D3D12CommandContext(this, CommandListType.Direct);
         SampleCount = (TextureSampleCount)samples;
+
+        FeatureDataRootSignature featureDataRootSignature = new()
+        {
+            HighestVersion = RootSignatureVersion.V1_1,
+        };
+
+        if (_device.Get()->CheckFeatureSupport(Feature.RootSignature, &featureDataRootSignature, sizeof(FeatureDataRootSignature)).Failure)
+        {
+            featureDataRootSignature.HighestVersion = RootSignatureVersion.V1_0;
+        }
+        _rootSignatureVersion = featureDataRootSignature.HighestVersion;
+
+        // Create universal compute root signature.
+        {
+            StaticSamplerDescription computeSamplerDesc = new(D3D12SamplerDescription.LinearWrap, ShaderVisibility.All, 0, 0);
+
+            DescriptorRange1* descriptorRanges = stackalloc DescriptorRange1[2];
+            descriptorRanges[0] = new DescriptorRange1(DescriptorRangeType.Srv, 1, 0, 0, DescriptorRangeFlags.DataStatic);
+            descriptorRanges[1] = new DescriptorRange1(DescriptorRangeType.Uav, 1, 0, 0, DescriptorRangeFlags.DataStaticWhileSetAtExecute);
+
+            RootParameter1* rootParameters = stackalloc RootParameter1[3];
+            rootParameters[0].InitAsDescriptorTable(1, &descriptorRanges[0]);
+            rootParameters[1].InitAsDescriptorTable(1, &descriptorRanges[1]);
+            rootParameters[2].InitAsConstants(1, 0);
+
+            VersionedRootSignatureDescription signatureDesc = new();
+            signatureDesc.Init_1_1(3, rootParameters, 1, &computeSamplerDesc);
+
+            _computeRootSignature = CreateRootSignature(signatureDesc);
+        }
 
         // Create SwapChain
         {
@@ -248,9 +294,19 @@ public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
 
         if (disposing)
         {
-            _colorTexture.Dispose();
+            WaitForGPU();
+
+            _computeRootSignature.Dispose();
+
+            for (int i = 0; i < _colorTextures.Length; i++)
+            {
+                _colorTextures[i].Dispose();
+            }
             _swapChain.Dispose();
             DefaultContext.Dispose();
+
+            _frameFence.Dispose();
+            _graphicsQueue.Dispose();
             _device.Dispose();
 
             _dxgiFactory.Dispose();
@@ -265,9 +321,48 @@ public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
         }
     }
 
+    public ComPtr<ID3D12RootSignature> CreateRootSignature(VersionedRootSignatureDescription desc)
+    {
+        RootSignatureFlags standardFlags =
+            RootSignatureFlags.DenyDomainShaderRootAccess |
+            RootSignatureFlags.DenyGeometryShaderRootAccess |
+            RootSignatureFlags.DenyHullShaderRootAccess;
+
+        switch (desc.Version)
+        {
+            case RootSignatureVersion.V1_0:
+                desc.Desc_1_0.Flags |= standardFlags;
+                break;
+            case RootSignatureVersion.V1_1:
+                desc.Desc_1_1.Flags |= standardFlags;
+                break;
+        }
+
+
+        using ComPtr<ID3DBlob> signatureBlob = default;
+        using ComPtr<ID3DBlob> errorBlob = default;
+        if (D3D12SerializeVersionedRootSignature(&desc, _rootSignatureVersion, signatureBlob.GetAddressOf(), errorBlob.GetAddressOf()).Failure)
+        {
+            throw new InvalidOperationException("Failed to serialize root signature");
+        }
+
+        using ComPtr<ID3D12RootSignature> rootSignature = default;
+        if (_device.Get()->CreateRootSignature(0,
+            signatureBlob.Get()->GetBufferPointer(),
+            signatureBlob.Get()->GetBufferSize(),
+            __uuidof<ID3D12RootSignature>(),
+            rootSignature.GetVoidAddressOf()).Failure)
+        {
+            throw new InvalidOperationException("Failed to create root signature");
+        }
+
+        return rootSignature.Move();
+    }
+
+
     private void AfterResize()
     {
-        if (_colorTexture is not null)
+        if (_colorTextures[0] is not null)
         {
         }
 
@@ -276,13 +371,16 @@ public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
 
         Size = new Size((int)swapChainDesc.Width, (int)swapChainDesc.Height);
 
-        //TextureDescription colorTextureDesc = TextureDescription.Texture2D(ColorFormat, Size.Width, Size.Height, 1, TextureUsage.RenderTarget);
-        //
-        //ID3D11Texture2D* d3dHandle = default;
-        //ThrowIfFailed(
-        //    _swapChain.Get()->GetBuffer(0, __uuidof<ID3D11Texture2D>(), (void**)&d3dHandle)
-        //    );
-        //_colorTexture = new D3D12Texture(this, colorTextureDesc, d3dHandle);
+        TextureDescription colorTextureDesc = TextureDescription.Texture2D(ColorFormat, Size.Width, Size.Height, 1, TextureUsage.ShaderRead | TextureUsage.RenderTarget);
+
+        for (uint i = 0; i < swapChainDesc.BufferCount; i++)
+        {
+            ID3D12Resource* d3dHandle = default;
+            ThrowIfFailed(
+                _swapChain.Get()->GetBuffer(i, __uuidof<ID3D12Resource>(), (void**)&d3dHandle)
+                );
+            _colorTextures[i] = new D3D12Texture(this, colorTextureDesc, d3dHandle);
+        }
     }
 
     public override bool BeginFrame()
@@ -293,6 +391,45 @@ public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
     public override void EndFrame()
     {
         _swapChain.Get()->Present(1, 0);
+
+        ulong prevFrameFenceValue = _fenceValues[_frameIndex];
+        _frameIndex = _swapChain.Get()->GetCurrentBackBufferIndex();
+        ref ulong currentFrameFenceValue = ref _fenceValues[_frameIndex];
+
+        _graphicsQueue.Get()->Signal(_frameFence.Get(), prevFrameFenceValue);
+
+        if (_frameFence.Get()->GetCompletedValue() < currentFrameFenceValue)
+        {
+            _frameFence.Get()->SetEventOnCompletion(currentFrameFenceValue, Win32.Handle.Null);
+        }
+
+        currentFrameFenceValue = prevFrameFenceValue + 1;
+    }
+
+    public void ExecuteCommandList(bool reset = true)
+    {
+        //ThrowIfFailed()
+        //if (FAILED(m_commandList->Close()))
+        //{
+        //    throw std::runtime_error("Failed close command list (validation error or not in recording state)");
+        //}
+        //
+        //ID3D12CommandList* lists[] = { m_commandList.Get() };
+        //m_commandQueue->ExecuteCommandLists(1, lists);
+        //
+        //if (reset)
+        //{
+        //    m_commandList->Reset(m_commandAllocators[m_frameIndex].Get(), nullptr);
+        //}
+    }
+
+    public void WaitForGPU()
+    {
+        ref ulong fenceValue = ref _fenceValues[_frameIndex];
+        ++fenceValue;
+
+        _graphicsQueue.Get()->Signal(_frameFence.Get(), fenceValue);
+        _frameFence.Get()->SetEventOnCompletion(fenceValue, Win32.Handle.Null);
     }
 
     protected override GraphicsBuffer CreateBufferCore(in BufferDescription description, void* initialData)
