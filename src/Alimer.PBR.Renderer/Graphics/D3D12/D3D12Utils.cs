@@ -1,26 +1,30 @@
 ﻿// Copyright © Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
-using Win32.Graphics.Direct3D11;
-using D3D11StencilOperation = Win32.Graphics.Direct3D11.StencilOperation;
-using D3D11CullMode = Win32.Graphics.Direct3D11.CullMode;
-using D3D11FillMode = Win32.Graphics.Direct3D11.FillMode;
-using D3D11BlendOperation = Win32.Graphics.Direct3D11.BlendOperation;
+using Win32.Graphics.Direct3D12;
+using D3DStencilOperation = Win32.Graphics.Direct3D12.StencilOperation;
+using D3DCullMode = Win32.Graphics.Direct3D12.CullMode;
+using D3DFillMode = Win32.Graphics.Direct3D12.FillMode;
+using D3DBlendOperation = Win32.Graphics.Direct3D12.BlendOperation;
 using System.Diagnostics;
 
 namespace Alimer.Graphics.D3D12;
 
 internal static class D3D12Utils
 {
-    private static readonly D3D11FillMode[] s_FillModeMap = new D3D11FillMode[(int)(FillMode.Wireframe + 1)] {
-        D3D11FillMode.Solid,
-        D3D11FillMode.Wireframe
+    public static readonly HeapProperties DefaultHeapProps = new(HeapType.Default);
+    public static readonly HeapProperties UploadHeapProps = new(HeapType.Upload);
+    public static readonly HeapProperties ReadbackeapProps = new(HeapType.Readback);
+
+    private static readonly D3DFillMode[] s_FillModeMap = new D3DFillMode[(int)(FillMode.Wireframe + 1)] {
+        D3DFillMode.Solid,
+        D3DFillMode.Wireframe
     };
 
-    private static readonly D3D11CullMode[] s_cullModeMap = new D3D11CullMode[(int)(CullMode.None + 1)] {
-        D3D11CullMode.Back,
-        D3D11CullMode.Front,
-        D3D11CullMode.None,
+    private static readonly D3DCullMode[] s_cullModeMap = new D3DCullMode[(int)(CullMode.None + 1)] {
+        D3DCullMode.Back,
+        D3DCullMode.Front,
+        D3DCullMode.None,
     };
 
     private static readonly Blend[] s_blendFactorMap = new Blend[(int)(BlendFactor.OneMinusBlendColor + 1)] {
@@ -39,30 +43,30 @@ internal static class D3D12Utils
         Blend.InverseBlendFactor
     };
 
-    private static readonly D3D11BlendOperation[] s_blendOpMap = new D3D11BlendOperation[(int)(BlendOperation.Max + 1)] {
-        D3D11BlendOperation.Add,
-        D3D11BlendOperation.Subtract,
-        D3D11BlendOperation.ReverseSubtract,
-        D3D11BlendOperation.Min,
-        D3D11BlendOperation.Max,
+    private static readonly D3DBlendOperation[] s_blendOpMap = new D3DBlendOperation[(int)(BlendOperation.Max + 1)] {
+        D3DBlendOperation.Add,
+        D3DBlendOperation.Subtract,
+        D3DBlendOperation.ReverseSubtract,
+        D3DBlendOperation.Min,
+        D3DBlendOperation.Max,
     };
 
-    private static readonly D3D11StencilOperation[] s_stencilOperationMap = new D3D11StencilOperation[(int)(StencilOperation.DecrementWrap + 1)] {
-        D3D11StencilOperation.Keep,
-        D3D11StencilOperation.Zero,
-        D3D11StencilOperation.Replace,
-        D3D11StencilOperation.IncrementSaturate,
-        D3D11StencilOperation.DecrementSaturate,
-        D3D11StencilOperation.Invert,
-        D3D11StencilOperation.Increment,
-        D3D11StencilOperation.Decrement,
+    private static readonly D3DStencilOperation[] s_stencilOperationMap = new D3DStencilOperation[(int)(StencilOperation.DecrementWrap + 1)] {
+        D3DStencilOperation.Keep,
+        D3DStencilOperation.Zero,
+        D3DStencilOperation.Replace,
+        D3DStencilOperation.IncrementSaturate,
+        D3DStencilOperation.DecrementSaturate,
+        D3DStencilOperation.Invert,
+        D3DStencilOperation.Increment,
+        D3DStencilOperation.Decrement,
     };
 
-    public static D3D11FillMode ToD3D11(this FillMode value) => s_FillModeMap[(uint)value];
-    public static D3D11CullMode ToD3D11(this CullMode value) => s_cullModeMap[(uint)value];
-    public static Blend ToD3D11(this BlendFactor factor) => s_blendFactorMap[(uint)factor];
-    public static D3D11BlendOperation ToD3D11(this BlendOperation value) => s_blendOpMap[(uint)value];
-    public static Blend ToD3D11AlphaBlend(this BlendFactor factor)
+    public static D3DFillMode ToD3D12(this FillMode value) => s_FillModeMap[(uint)value];
+    public static D3DCullMode ToD3D12(this CullMode value) => s_cullModeMap[(uint)value];
+    public static Blend ToD3D12(this BlendFactor factor) => s_blendFactorMap[(uint)factor];
+    public static D3DBlendOperation ToD3D12(this BlendOperation value) => s_blendOpMap[(uint)value];
+    public static Blend ToD3D12AlphaBlend(this BlendFactor factor)
     {
         switch (factor)
         {
@@ -80,11 +84,11 @@ internal static class D3D12Utils
             //    return Blend.InverseSrc1Alpha;
             // Other blend factors translate to the same D3D12 enum as the color blend factors.
             default:
-                return ToD3D11(factor);
+                return ToD3D12(factor);
         }
     }
 
-    public static ColorWriteEnable ToD3D11(this ColorWriteMask writeMask)
+    public static ColorWriteEnable ToD3D12(this ColorWriteMask writeMask)
     {
         Debug.Assert((byte)ColorWriteMask.Red == (byte)ColorWriteEnable.Red);
         Debug.Assert((byte)ColorWriteMask.Green == (byte)ColorWriteEnable.Green);
@@ -94,7 +98,7 @@ internal static class D3D12Utils
         return (ColorWriteEnable)writeMask;
     }
 
-    public static ComparisonFunction ToD3D11(this CompareFunction function)
+    public static ComparisonFunction ToD3D12(this CompareFunction function)
     {
         switch (function)
         {
@@ -112,7 +116,7 @@ internal static class D3D12Utils
         }
     }
 
-    public static FilterType ToD3D11(this SamplerMinMagFilter filter)
+    public static FilterType ToD3D12(this SamplerMinMagFilter filter)
     {
         switch (filter)
         {
@@ -124,7 +128,7 @@ internal static class D3D12Utils
         }
     }
 
-    public static FilterType ToD3D11(this SamplerMipFilter filter)
+    public static FilterType ToD3D12(this SamplerMipFilter filter)
     {
         switch (filter)
         {
@@ -136,7 +140,7 @@ internal static class D3D12Utils
         }
     }
 
-    public static TextureAddressMode ToD3D11(this SamplerAddressMode filter)
+    public static TextureAddressMode ToD3D12(this SamplerAddressMode filter)
     {
         switch (filter)
         {
@@ -149,15 +153,15 @@ internal static class D3D12Utils
         }
     }
 
-    public static D3D11StencilOperation ToD3D11(this StencilOperation operation) => s_stencilOperationMap[(uint)operation];
+    public static D3DStencilOperation ToD3D12(this StencilOperation operation) => s_stencilOperationMap[(uint)operation];
 
-    public static DepthStencilOperationDescription ToD3D11(this StencilFaceState state)
+    public static DepthStencilOperationDescription ToD3D12(this StencilFaceState state)
     {
         return new DepthStencilOperationDescription(
-            state.FailOperation.ToD3D11(),
-            state.DepthFailOperation.ToD3D11(),
-            state.PassOperation.ToD3D11(),
-            state.CompareFunction.ToD3D11()
+            state.FailOperation.ToD3D12(),
+            state.DepthFailOperation.ToD3D12(),
+            state.PassOperation.ToD3D12(),
+            state.CompareFunction.ToD3D12()
             );
     }
 }

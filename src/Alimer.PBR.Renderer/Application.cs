@@ -99,7 +99,7 @@ public sealed class Application : GraphicsObject
 
         Size = new Size(width, height);
 
-        _graphicsDevice = GraphicsDevice.CreateDefault(_window, maxSamples);
+        _graphicsDevice = GraphicsDevice.CreateDefault(graphicsBackend, _window, maxSamples);
         _viewSettings = new(0.0f, 0.0f, 150.0f, 45.0f);
 
         _lights[0].Direction = Vector3.Normalize(new Vector3(-1.0f, 0.0f, 0.0f));

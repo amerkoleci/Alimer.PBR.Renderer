@@ -2,8 +2,7 @@
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using Win32;
-using Win32.Graphics.Direct3D;
-using Win32.Graphics.Direct3D11;
+using Win32.Graphics.Direct3D12;
 using Win32.Graphics.Dxgi.Common;
 using static Win32.Apis;
 
@@ -11,43 +10,48 @@ namespace Alimer.Graphics.D3D12;
 
 internal sealed unsafe class D3D12Texture : Texture
 {
-    private readonly ID3D11Resource* _handle;
-    private readonly ComPtr<ID3D11ShaderResourceView> _srv = default;
+    private readonly ID3D12Resource* _handle;
+    private readonly CpuDescriptorHandle _srv = default;
     private readonly object _rtvLock = new();
     private readonly object _uavLock = new();
-    private readonly Dictionary<int, ComPtr<ID3D11RenderTargetView>> _rtvs = new();
-    private readonly Dictionary<int, ComPtr<ID3D11DepthStencilView>> _dsvs = new();
-    private readonly Dictionary<int, ComPtr<ID3D11UnorderedAccessView>> _uavs = new();
+    private readonly Dictionary<int, CpuDescriptorHandle> _rtvs = new();
+    private readonly Dictionary<int, CpuDescriptorHandle> _dsvs = new();
+    private readonly Dictionary<int, CpuDescriptorHandle> _uavs = new();
 
-    public D3D12Texture(D3D12GraphicsDevice device, in TextureDescription description, ID3D11Texture2D* existingHandle)
+    public D3D12Texture(D3D12GraphicsDevice device, in TextureDescription description, ID3D12Resource* existingHandle)
         : base(device, description)
     {
-        _handle = (ID3D11Resource*)existingHandle;
+        _handle = existingHandle;
         DxgiFormat = description.Format.ToDxgiFormat();
     }
 
     public D3D12Texture(D3D12GraphicsDevice device, in TextureDescription description, void* initialData = default)
         : base(device, description)
     {
-        BindFlags bindFlags = BindFlags.None;
-        ResourceMiscFlags miscFlags = ResourceMiscFlags.None;
-        if ((description.Usage & TextureUsage.ShaderRead) != 0)
-        {
-            bindFlags |= BindFlags.ShaderResource;
-        }
+        HeapProperties heapProps = D3D12Utils.DefaultHeapProps;
+        ResourceFlags resourceFlags = ResourceFlags.None;
+        int sampleCount = (int)description.SampleCount;
+
+
         if ((description.Usage & TextureUsage.ShaderWrite) != 0)
         {
-            bindFlags |= BindFlags.UnorderedAccess;
+            resourceFlags |= ResourceFlags.AllowUnorderedAccess;
         }
+
         if ((description.Usage & TextureUsage.RenderTarget) != 0)
         {
             if (description.Format.IsDepthStencilFormat())
             {
-                bindFlags |= BindFlags.DepthStencil;
+                resourceFlags |= ResourceFlags.AllowDepthStencil;
+
+                if ((description.Usage & TextureUsage.ShaderRead) == 0)
+                {
+                    resourceFlags |= ResourceFlags.DenyShaderResource;
+                }
             }
             else
             {
-                bindFlags |= BindFlags.RenderTarget;
+                resourceFlags |= ResourceFlags.AllowRenderTarget;
             }
         }
 
@@ -55,49 +59,46 @@ internal sealed unsafe class D3D12Texture : Texture
         if (description.Dimension == TextureDimension.TextureCube)
         {
             arrayMultiplier = 6;
-            miscFlags |= ResourceMiscFlags.TextureCube;
         }
 
         if (description.MipLevels == 0)
         {
-            bindFlags |= BindFlags.RenderTarget;
-            miscFlags |= ResourceMiscFlags.GenerateMips;
+            resourceFlags |= ResourceFlags.AllowRenderTarget;
         }
 
         DxgiFormat = description.Format.ToDxgiFormat();
 
-        Texture2DDescription d3dDesc = new()
-        {
-            Width = (uint)Width,
-            Height = (uint)Height,
-            MipLevels = (uint)MipLevels,
-            ArraySize = (uint)(description.DepthOrArrayLayers * arrayMultiplier),
-            Format = DxgiFormat,
-            SampleDesc = new SampleDescription((uint)description.SampleCount, 0),
-            BindFlags = bindFlags,
-            MiscFlags = miscFlags
-        };
 
-        SubresourceData* pInitialData = default;
-        SubresourceData subresourceData = default;
-        if (initialData != null)
-        {
-            subresourceData.pSysMem = initialData;
-            subresourceData.SysMemPitch = (uint)(description.Width * description.Format.BytesPerPixels());
-            pInitialData = &subresourceData;
-        }
+        ResourceDescription desc = ResourceDescription.Tex2D(DxgiFormat,
+            (ulong)description.Width,
+            (uint)description.Height,
+            (ushort)description.DepthOrArrayLayers,
+            (ushort)description.MipLevels,
+            (uint)sampleCount,
+            0,
+            resourceFlags
+            );
 
-        ID3D11Texture2D* tex2D = default;
-        HResult hr = device.NativeDevice->CreateTexture2D(&d3dDesc, pInitialData, &tex2D);
+        ID3D12Resource* handle = default;
+        HResult hr = device.NativeDevice->CreateCommittedResource(
+            &heapProps,
+            HeapFlags.None,
+            &desc,
+            ResourceStates.Common,
+            null,
+            __uuidof<ID3D12Resource>(),
+            (void**)&handle
+            );
+
         if (hr.Failure)
         {
             throw new InvalidOperationException("D3D11: Failed to create texture");
         }
-        _handle = (ID3D11Resource*)tex2D;
+        _handle = handle;
 
         if (!string.IsNullOrEmpty(description.Label))
         {
-            _handle->SetDebugName(description.Label);
+            _handle->SetName(description.Label);
         }
 
         if ((description.Usage & TextureUsage.ShaderRead) != 0)
@@ -118,7 +119,7 @@ internal sealed unsafe class D3D12Texture : Texture
             }
 
 
-            ThrowIfFailed(device.NativeDevice->CreateShaderResourceView(Handle, &srvDesc, _srv.GetAddressOf()));
+            //ThrowIfFailed(device.NativeDevice->CreateShaderResourceView(Handle, &srvDesc, _srv.GetAddressOf()));
         }
     }
 
@@ -128,45 +129,45 @@ internal sealed unsafe class D3D12Texture : Texture
 
         if (disposing)
         {
-            foreach (KeyValuePair<int, ComPtr<ID3D11RenderTargetView>> kvp in _rtvs)
-            {
-                kvp.Value.Dispose();
-            }
+            //foreach (KeyValuePair<int, ComPtr<ID3D11RenderTargetView>> kvp in _rtvs)
+            //{
+            //    kvp.Value.Dispose();
+            //}
 
-            foreach (KeyValuePair<int, ComPtr<ID3D11DepthStencilView>> kvp in _dsvs)
-            {
-                kvp.Value.Dispose();
-            }
+            //foreach (KeyValuePair<int, ComPtr<ID3D11DepthStencilView>> kvp in _dsvs)
+            //{
+            //    kvp.Value.Dispose();
+            //}
 
-            foreach (KeyValuePair<int, ComPtr<ID3D11UnorderedAccessView>> kvp in _uavs)
-            {
-                kvp.Value.Dispose();
-            }
+            //foreach (KeyValuePair<int, ComPtr<ID3D11UnorderedAccessView>> kvp in _uavs)
+            //{
+            //    kvp.Value.Dispose();
+            //}
 
             _rtvs.Clear();
             _dsvs.Clear();
             _uavs.Clear();
-            _srv.Dispose();
+            //_srv.Dispose();
             _handle->Release();
         }
     }
 
     protected override void OnLabelChanged(string newLabel)
     {
-        Handle->SetDebugName(newLabel);
+        Handle->SetName(newLabel);
     }
 
     public Format DxgiFormat { get; }
-    public ID3D11Resource* Handle => _handle;
-    public ID3D11ShaderResourceView* SRV => _srv;
+    public ID3D12Resource* Handle => _handle;
+    public CpuDescriptorHandle SRV => _srv;
 
-    internal ID3D11RenderTargetView* GetRTV(int mipLevel, int slice)
+    internal CpuDescriptorHandle GetRTV(int mipLevel, int slice)
     {
         lock (_rtvLock)
         {
             int hashCode = HashCode.Combine(mipLevel, slice);
 
-            if (!_rtvs.TryGetValue(hashCode, out ComPtr<ID3D11RenderTargetView> rtv))
+            if (!_rtvs.TryGetValue(hashCode, out CpuDescriptorHandle rtv))
             {
                 RenderTargetViewDescription viewDesc = new()
                 {
@@ -222,21 +223,21 @@ internal sealed unsafe class D3D12Texture : Texture
                         break;
                 }
 
-                ThrowIfFailed(((D3D12GraphicsDevice)Device).NativeDevice->CreateRenderTargetView(Handle, &viewDesc, rtv.GetAddressOf()));
+                //ThrowIfFailed(((D3D12GraphicsDevice)Device).NativeDevice->CreateRenderTargetView(Handle, &viewDesc, rtv.GetAddressOf()));
                 _rtvs.Add(hashCode, rtv);
             }
 
-            return rtv.Get();
+            return rtv;
         }
     }
 
-    internal ID3D11DepthStencilView* GetDSV(int mipLevel, int slice)
+    internal CpuDescriptorHandle GetDSV(int mipLevel, int slice)
     {
         lock (_rtvLock)
         {
             int hashCode = HashCode.Combine(mipLevel, slice);
 
-            if (!_dsvs.TryGetValue(hashCode, out ComPtr<ID3D11DepthStencilView> dsv))
+            if (!_dsvs.TryGetValue(hashCode, out CpuDescriptorHandle dsv))
             {
                 DepthStencilViewDescription viewDesc = new()
                 {
@@ -292,19 +293,19 @@ internal sealed unsafe class D3D12Texture : Texture
                         break;
                 }
 
-                ThrowIfFailed(((D3D12GraphicsDevice)Device).NativeDevice->CreateDepthStencilView(Handle, &viewDesc, dsv.GetAddressOf()));
+                //ThrowIfFailed(((D3D12GraphicsDevice)Device).NativeDevice->CreateDepthStencilView(Handle, &viewDesc, dsv.GetAddressOf()));
                 _dsvs.Add(hashCode, dsv);
             }
 
-            return dsv.Get();
+            return dsv;
         }
     }
 
-    internal ID3D11UnorderedAccessView* GetUAV(int mipLevel)
+    internal CpuDescriptorHandle GetUAV(int mipLevel)
     {
         lock (_uavLock)
         {
-            if (!_uavs.TryGetValue(mipLevel, out ComPtr<ID3D11UnorderedAccessView> uav))
+            if (!_uavs.TryGetValue(mipLevel, out CpuDescriptorHandle uav))
             {
                 UnorderedAccessViewDescription uavDesc = new()
                 {
@@ -325,11 +326,11 @@ internal sealed unsafe class D3D12Texture : Texture
                 }
 
 
-                ThrowIfFailed(((D3D12GraphicsDevice)Device).NativeDevice->CreateUnorderedAccessView(Handle, &uavDesc, uav.GetAddressOf()));
+                //ThrowIfFailed(((D3D12GraphicsDevice)Device).NativeDevice->CreateUnorderedAccessView(Handle, &uavDesc, uav.GetAddressOf()));
                 _uavs.Add(mipLevel, uav);
             }
 
-            return uav.Get();
+            return uav;
         }
     }
 }

@@ -3,67 +3,70 @@
 
 using Vortice.Mathematics;
 using Win32;
-using Win32.Graphics.Direct3D11;
-using D3D11BufferDesc = Win32.Graphics.Direct3D11.BufferDescription;
+using Win32.Graphics.Direct3D12;
+using static Win32.Apis;
+using static Win32.Graphics.Direct3D12.Apis;
 
 namespace Alimer.Graphics.D3D12;
 
 internal sealed unsafe class D3D12Buffer : GraphicsBuffer
 {
-    private readonly ComPtr<ID3D11Buffer> _handle;
+    private readonly ComPtr<ID3D12Resource> _handle;
 
     public D3D12Buffer(D3D12GraphicsDevice device, in BufferDescription description, void* initialData = default)
         : base(device, description)
     {
         uint size = (uint)description.Size;
-        BindFlags bindFlags = BindFlags.None;
-        Usage usage = Win32.Graphics.Direct3D11.Usage.Default;
-        CpuAccessFlags cpuAccessFlags = CpuAccessFlags.None;
-
         if ((description.Usage & BufferUsage.Constant) != BufferUsage.None)
         {
-            size = MathHelper.AlignUp(size, 64u);
-            bindFlags = BindFlags.ConstantBuffer;
-            usage = Win32.Graphics.Direct3D11.Usage.Dynamic;
-            cpuAccessFlags = CpuAccessFlags.Write;
-            IsDynamic = true;
+            size = MathHelper.AlignUp(size, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
         }
-        else
+
+        HeapProperties heapProps = D3D12Utils.DefaultHeapProps;
+        ResourceFlags resourceFlags = ResourceFlags.None;
+
+        if ((description.Usage & BufferUsage.ShaderWrite) != BufferUsage.None)
         {
-            if ((description.Usage & BufferUsage.Vertex) != BufferUsage.None)
-            {
-                bindFlags |= BindFlags.VertexBuffer;
-            }
-
-            if ((description.Usage & BufferUsage.Index) != BufferUsage.None)
-            {
-                bindFlags |= BindFlags.IndexBuffer;
-            }
+            resourceFlags |= ResourceFlags.AllowUnorderedAccess;
         }
 
-        D3D11BufferDesc d3dDesc = new(size, bindFlags, usage, cpuAccessFlags);
-
-        SubresourceData* pInitialData = default;
-        SubresourceData subresourceData = default;
-        if (initialData != null)
+        if (!((description.Usage & BufferUsage.ShaderRead) == BufferUsage.None)/* &&
+            !((description.Usage & BufferUsage.RayTracing) == BufferUsage.None)*/)
         {
-            subresourceData.pSysMem = initialData;
-            pInitialData = &subresourceData;
+            resourceFlags |= ResourceFlags.DenyShaderResource;
         }
 
-        HResult hr = device.NativeDevice->CreateBuffer(&d3dDesc, pInitialData, _handle.GetAddressOf());
+        ResourceDescription desc = ResourceDescription.Buffer(size, resourceFlags);
+
+        //SubresourceData* pInitialData = default;
+        //SubresourceData subresourceData = default;
+        //if (initialData != null)
+        //{
+        //    subresourceData.pSysMem = initialData;
+        //    pInitialData = &subresourceData;
+        //}
+
+        HResult hr = device.NativeDevice->CreateCommittedResource(
+           &heapProps,
+           HeapFlags.None,
+           &desc,
+           ResourceStates.Common,
+           null,
+           __uuidof<ID3D12Resource>(),
+           _handle.GetVoidAddressOf()
+           );
         if (hr.Failure)
         {
-            throw new InvalidOperationException("D3D11: Failed to create buffer");
+            throw new InvalidOperationException("D3D12: Failed to create buffer");
         }
 
         if (!string.IsNullOrEmpty(description.Label))
         {
-            _handle.Get()->SetDebugName(description.Label);
+            _handle.Get()->SetName(description.Label);
         }
     }
 
-    public ID3D11Buffer* Handle => _handle.Get();
+    public ID3D12Resource* Handle => _handle.Get();
     public bool IsDynamic { get; }
 
     protected override void Dispose(bool disposing)
@@ -78,6 +81,6 @@ internal sealed unsafe class D3D12Buffer : GraphicsBuffer
 
     protected override void OnLabelChanged(string newLabel)
     {
-        Handle->SetDebugName(newLabel);
+        _handle.Get()->SetName(newLabel);
     }
 }

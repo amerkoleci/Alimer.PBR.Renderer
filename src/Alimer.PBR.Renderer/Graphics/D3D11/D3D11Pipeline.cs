@@ -85,15 +85,11 @@ internal sealed unsafe class D3D11Pipeline : Pipeline
                 _strides[slot] = layout.Stride;
             }
 
-            fixed (InputElementDescription* pInputElements = d3d11InputElementDescs)
-            fixed (byte* pShaderBytecode = description.VertexShader.Span)
-            {
-                ThrowIfFailed(device.NativeDevice->CreateInputLayout(
-                    pInputElements, (uint)d3d11InputElementIndex,
-                    pShaderBytecode, (nuint)description.VertexShader.Length,
-                    _inputLayout.GetAddressOf())
-                );
-            }
+            ThrowIfFailed(device.NativeDevice->CreateInputLayout(
+                d3d11InputElementDescs, (uint)d3d11InputElementIndex,
+                description.VertexShader.Span,
+                _inputLayout.GetAddressOf())
+            );
         }
 
         BlendDescription blendDesc = new()

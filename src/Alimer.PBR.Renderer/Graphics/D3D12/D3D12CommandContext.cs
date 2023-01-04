@@ -2,10 +2,10 @@
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using Vortice.Mathematics;
-using Win32.Graphics.Direct3D11;
+using Win32.Graphics.Direct3D12;
 using D3DPrimitiveTopology = Win32.Graphics.Direct3D.PrimitiveTopology;
 using static Win32.Apis;
-using static Win32.Graphics.Direct3D11.Apis;
+using static Win32.Graphics.Direct3D12.Apis;
 using System.Runtime.CompilerServices;
 using CommunityToolkit.Diagnostics;
 using Win32;
@@ -16,36 +16,38 @@ namespace Alimer.Graphics.D3D12;
 internal sealed unsafe class D3D12CommandContext : CommandContext
 {
     private readonly D3D12GraphicsDevice _device;
-    private readonly ID3D11DeviceContext1* _context;
-    private readonly ComPtr<ID3DUserDefinedAnnotation> _annotation;
+    private readonly ComPtr<ID3D12CommandAllocator>[] _commandAllocators = new ComPtr<ID3D12CommandAllocator>[GraphicsDevice.NumFramesInFlight];
+    private readonly ComPtr<ID3D12GraphicsCommandList> _commandList;
 
     private D3D12Pipeline? _currentPipeline;
-    private ID3D11BlendState* _currentBlendState;
-    private ID3D11RasterizerState* _currentRasterizerState;
-    private ID3D11DepthStencilState* _currentDepthStencilState;
     private D3DPrimitiveTopology _currentPrimitiveTopology;
 
     private RenderPassDescriptor _currentRenderPass;
-    private readonly ID3D11RenderTargetView*[] _rtvs = new ID3D11RenderTargetView*[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT];
-    private ID3D11DepthStencilView* DSV = null;
+    //private readonly ID3D11RenderTargetView*[] _rtvs = new ID3D11RenderTargetView*[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT];
+    //private ID3D11DepthStencilView* DSV = null;
+    //private readonly ID3D11Buffer*[] _vertexBindings = new ID3D11Buffer*[8];
+    //private uint[] _vertexOffsets = new uint[8];
 
-    private readonly ID3D11Buffer*[] _vertexBindings = new ID3D11Buffer*[8];
-    private uint[] _vertexOffsets = new uint[8];
-
-    private readonly ID3D11Buffer*[] _constantBuffers = new ID3D11Buffer*[4];
-    private readonly ID3D11SamplerState*[] _samplers = new ID3D11SamplerState*[16];
-    private readonly ID3D11ShaderResourceView*[] _srvs = new ID3D11ShaderResourceView*[16];
-    private readonly ID3D11UnorderedAccessView*[] _uavs = new ID3D11UnorderedAccessView*[16];
-    private uint _numCBVBindings;
-    private uint _numSamplerBindings;
-    private uint _numSRVBindings;
-    private uint _numUAVBindings;
-
-    public D3D12CommandContext(D3D12GraphicsDevice device)
+    public D3D12CommandContext(D3D12GraphicsDevice device, CommandListType type)
     {
         _device = device;
-        _context = device.NativeContext;
-        _context->QueryInterface(__uuidof<ID3DUserDefinedAnnotation>(), _annotation.GetVoidAddressOf());
+
+        for (int i = 0; i < GraphicsDevice.NumFramesInFlight; i++)
+        {
+            ThrowIfFailed(device.NativeDevice->CreateCommandAllocator(type,
+                __uuidof<ID3D12CommandAllocator>(),
+                _commandAllocators[i].GetVoidAddressOf()
+                ));
+        }
+
+        ThrowIfFailed(device.NativeDevice->CreateCommandList(
+            0,
+            type,
+            _commandAllocators[0].Get(),
+            null,
+            __uuidof<ID3D12GraphicsCommandList>(),
+            _commandList.GetVoidAddressOf()
+            ));
     }
 
     protected override void Dispose(bool disposing)
@@ -54,7 +56,12 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
 
         if (disposing)
         {
-            _annotation.Dispose();
+            for (int i = 0; i < GraphicsDevice.NumFramesInFlight; i++)
+            {
+                _commandAllocators[i].Dispose();
+            }
+
+            _commandList.Dispose();
         }
     }
 
@@ -62,25 +69,26 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
     {
         fixed (char* groupLabelPtr = groupLabel)
         {
-            _annotation.Get()->BeginEvent((ushort*)groupLabelPtr);
+            //_annotation.Get()->BeginEvent((ushort*)groupLabelPtr);
         }
     }
 
     public override void PopDebugGroup()
     {
-        _annotation.Get()->EndEvent();
+        //_annotation.Get()->EndEvent();
     }
 
     public override void InsertDebugMarker(string debugLabel)
     {
         fixed (char* debugLabelPtr = debugLabel)
         {
-            _annotation.Get()->SetMarker((ushort*)debugLabelPtr);
+            //_annotation.Get()->SetMarker((ushort*)debugLabelPtr);
         }
     }
 
     protected override void BeginRenderPassCore(in RenderPassDescriptor renderPass)
     {
+#if TODO
         uint numRTVs = 0;
         DSV = default;
         Size renderArea = new(int.MaxValue, int.MaxValue);
@@ -104,7 +112,7 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
                 renderArea.Width = Math.Min(renderArea.Width, texture.GetWidth(mipLevel));
                 renderArea.Height = Math.Min(renderArea.Height, texture.GetHeight(mipLevel));
 
-                _rtvs[numRTVs] = texture.GetRTV(mipLevel, slice);
+                //_rtvs[numRTVs] = texture.GetRTV(mipLevel, slice);
 
                 switch (attachment.LoadAction)
                 {
@@ -136,7 +144,7 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
             renderArea.Width = Math.Min(renderArea.Width, texture.GetWidth(mipLevel));
             renderArea.Height = Math.Min(renderArea.Height, texture.GetHeight(mipLevel));
 
-            DSV = texture.GetDSV(mipLevel, slice);
+            //DSV = texture.GetDSV(mipLevel, slice);
 
             ClearFlags clearFlags = ClearFlags.None;
             switch (attachment.DepthLoadAction)
@@ -183,13 +191,15 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
         RawRect scissorRect = new(0, 0, renderArea.Width, renderArea.Height);
 
         _context->RSSetViewports(1, &viewport);
-        _context->RSSetScissorRects(1, &scissorRect);
+        _context->RSSetScissorRects(1, &scissorRect); 
+#endif
 
         _currentRenderPass = renderPass;
     }
 
     protected override void EndRenderPassCore()
     {
+#if TODO
         if (_currentRenderPass.ColorAttachments.Length > 0)
         {
             for (int index = 0; index < _currentRenderPass.ColorAttachments.Length; index++)
@@ -200,7 +210,7 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
                 D3D12Texture texture = (D3D12Texture)attachment.Texture;
                 int mipLevel = attachment.MipLevel;
                 int slice = attachment.Slice;
-                uint srcSubResource = D3D11CalcSubresource((uint)mipLevel, (uint)slice, (uint)texture.MipLevels);
+                uint srcSubResource = D3D12CalcSubresource((uint)mipLevel, (uint)slice, (uint)texture.MipLevels);
 
                 switch (attachment.StoreAction)
                 {
@@ -209,7 +219,7 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
                         {
                             D3D12Texture resolveTexture = (D3D12Texture)attachment.ResolveTexture!;
                             uint dstSubResource = D3D11CalcSubresource((uint)attachment.ResolveMipLevel, (uint)attachment.ResolveSlice, (uint)resolveTexture.MipLevels);
-                            _context->ResolveSubresource(resolveTexture.Handle, dstSubResource, texture.Handle, srcSubResource, resolveTexture.DxgiFormat);
+                            //_context->ResolveSubresource(resolveTexture.Handle, dstSubResource, texture.Handle, srcSubResource, resolveTexture.DxgiFormat);
                         }
                         break;
 
@@ -255,7 +265,8 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
             }
         }
 
-        _context->OMSetRenderTargets(0, null, null);
+        _context->OMSetRenderTargets(0, null, null); 
+#endif
 
         if (!string.IsNullOrEmpty(_currentRenderPass.Label))
         {
@@ -273,85 +284,61 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
 
         if (d3d11Pipeline.PipelineType == PipelineType.Render)
         {
-            _context->CSSetShader(null);
-
-            _context->VSSetShader(d3d11Pipeline.VS);
-            _context->PSSetShader(d3d11Pipeline.PS);
-            _context->IASetInputLayout(d3d11Pipeline.InputLayout);
-
-            if (_currentBlendState != d3d11Pipeline.BlendState)
-            {
-                _currentBlendState = d3d11Pipeline.BlendState;
-                _context->OMSetBlendState(_currentBlendState);
-            }
-
-            if (_currentRasterizerState != d3d11Pipeline.RasterizerState)
-            {
-                _currentRasterizerState = d3d11Pipeline.RasterizerState;
-                _context->RSSetState(_currentRasterizerState);
-            }
-
-            if (_currentDepthStencilState != d3d11Pipeline.DepthStencilState)
-            {
-                _currentDepthStencilState = d3d11Pipeline.DepthStencilState;
-                _context->OMSetDepthStencilState(_currentDepthStencilState, 0);
-            }
-
             if (_currentPrimitiveTopology != d3d11Pipeline.PrimitiveTopology)
             {
                 _currentPrimitiveTopology = d3d11Pipeline.PrimitiveTopology;
-                _context->IASetPrimitiveTopology(d3d11Pipeline.PrimitiveTopology);
+                _commandList.Get()->IASetPrimitiveTopology(d3d11Pipeline.PrimitiveTopology);
             }
         }
         else if (d3d11Pipeline.PipelineType == PipelineType.Compute)
         {
-            _context->CSSetShader(d3d11Pipeline.CS, null, 0);
         }
     }
 
     public override void SetVertexBuffer(uint slot, GraphicsBuffer buffer, uint offset = 0)
     {
-        var d3dBuffer = ((D3D12Buffer)buffer);
-
-        if (_vertexBindings[slot] != d3dBuffer.Handle || _vertexOffsets[slot] != offset)
-        {
-            _vertexBindings[slot] = d3dBuffer.Handle;
-            _vertexOffsets[slot] = offset;
-        }
+        //var d3dBuffer = ((D3D12Buffer)buffer);
+        //
+        //if (_vertexBindings[slot] != d3dBuffer.Handle || _vertexOffsets[slot] != offset)
+        //{
+        //    _vertexBindings[slot] = d3dBuffer.Handle;
+        //    _vertexOffsets[slot] = offset;
+        //}
     }
 
     public override void SetIndexBuffer(GraphicsBuffer buffer, uint offset, IndexType indexType)
     {
-        var d3dBuffer = ((D3D12Buffer)buffer).Handle;
-        _context->IASetIndexBuffer(d3dBuffer, indexType.ToDxgiFormat(), offset);
+        //var d3dBuffer = ((D3D12Buffer)buffer).Handle;
+        //_context->IASetIndexBuffer(d3dBuffer, indexType.ToDxgiFormat(), offset);
     }
 
     public override void SetConstantBuffer(int index, GraphicsBuffer buffer)
     {
-        _constantBuffers[index] = ((D3D12Buffer)buffer).Handle;
-        _numCBVBindings = Math.Max((uint)index + 1, _numCBVBindings);
+        //_constantBuffers[index] = ((D3D12Buffer)buffer).Handle;
+        // _numCBVBindings = Math.Max((uint)index + 1, _numCBVBindings);
     }
 
     public override void SetSampler(int index, Sampler sampler)
     {
-        _samplers[index] = ((D3D12Sampler)sampler).Handle;
-        _numSamplerBindings = Math.Max((uint)index + 1, _numSamplerBindings);
+        //_samplers[index] = ((D3D12Sampler)sampler).Handle;
+        //_numSamplerBindings = Math.Max((uint)index + 1, _numSamplerBindings);
     }
 
     public override void SetSRV(int index, Texture texture)
     {
-        _srvs[index] = ((D3D12Texture)texture).SRV;
-        _numSRVBindings = Math.Max((uint)index + 1, _numSRVBindings);
+        //_srvs[index] = ((D3D12Texture)texture).SRV;
+        //_numSRVBindings = Math.Max((uint)index + 1, _numSRVBindings);
     }
 
     public override void SetUAV(int index, Texture texture, int mipLevel)
     {
-        _uavs[index] = ((D3D12Texture)texture).GetUAV(mipLevel);
-        _numUAVBindings = Math.Max((uint)index + 1, _numUAVBindings);
+        //_uavs[index] = ((D3D12Texture)texture).GetUAV(mipLevel);
+        //_numUAVBindings = Math.Max((uint)index + 1, _numUAVBindings);
     }
 
     public override unsafe void UpdateConstantBuffer(GraphicsBuffer source, void* data, uint size)
     {
+#if TODO
         var d3dSource = (D3D12Buffer)source;
         if (d3dSource.IsDynamic)
         {
@@ -367,7 +354,8 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
         else
         {
             _context->UpdateSubresource((ID3D11Resource*)d3dSource.Handle, 0, null, data, 0, 0);
-        }
+        } 
+#endif
     }
 
     public override void CopyTexture(Texture source, Texture destination)
@@ -375,151 +363,50 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
         var d3dSource = (D3D12Texture)source;
         var d3dDest = (D3D12Texture)destination;
 
-        _context->CopyResource(d3dDest.Handle, d3dSource.Handle);
+        //_context->CopyResource(d3dDest.Handle, d3dSource.Handle);
     }
 
     public override void CopyTexture(Texture source, int sourceArraySlice, Texture destination, int destArraySlice)
     {
-        var d3dSource = (D3D12Texture)source;
-        var srcSubresource = D3D11CalcSubresource(0u, (uint)sourceArraySlice, (uint)source.MipLevels);
-        var d3dDest = (D3D12Texture)destination;
-        var dstSubresource = D3D11CalcSubresource(0u, (uint)destArraySlice, (uint)source.MipLevels);
-
-        _context->CopySubresourceRegion(d3dDest.Handle, dstSubresource, 0, 0, 0, d3dSource.Handle, srcSubresource, null);
-
+        //var d3dSource = (D3D12Texture)source;
+        //var srcSubresource = D3D11CalcSubresource(0u, (uint)sourceArraySlice, (uint)source.MipLevels);
+        //var d3dDest = (D3D12Texture)destination;
+        //var dstSubresource = D3D11CalcSubresource(0u, (uint)destArraySlice, (uint)source.MipLevels);
+        // _context->CopySubresourceRegion(d3dDest.Handle, dstSubresource, 0, 0, 0, d3dSource.Handle, srcSubresource, null);
     }
 
     public override void GenerateMips(Texture texture)
     {
-        _context->GenerateMips(((D3D12Texture)texture).SRV);
+        //_context->GenerateMips(((D3D12Texture)texture).SRV);
     }
 
     public override void Dispatch(int groupCountX, int groupCountY, int groupCountZ)
     {
         PrepareDispatch();
-        _context->Dispatch((uint)groupCountX, (uint)groupCountY, (uint)groupCountZ);
-
-        ID3D11Buffer* nullBuffer = default;
-        ID3D11UnorderedAccessView* nullUAV = default;
-        _context->CSSetConstantBuffers(0, 1, &nullBuffer);
-        _context->CSSetUnorderedAccessViews(0, 1, &nullUAV, null);
+        _commandList.Get()->Dispatch((uint)groupCountX, (uint)groupCountY, (uint)groupCountZ);
     }
 
     public override void Draw(int vertexCount, int instanceCount = 1, int firstVertex = 0, int firstInstance = 0)
     {
         PrepareDraw();
 
-        if (instanceCount > 1)
-        {
-            _context->DrawInstanced((uint)vertexCount, (uint)instanceCount, (uint)firstVertex, (uint)firstInstance);
-        }
-        else
-        {
-            _context->Draw((uint)vertexCount, (uint)firstVertex);
-        }
+        _commandList.Get()->DrawInstanced((uint)vertexCount, (uint)instanceCount, (uint)firstVertex, (uint)firstInstance);
     }
 
     public override void DrawIndexed(int indexCount, int instanceCount = 1, int firstIndex = 0, int baseVertex = 0, int firstInstance = 0)
     {
         PrepareDraw();
 
-        if (instanceCount > 1)
-        {
-            _context->DrawIndexedInstanced((uint)indexCount, (uint)instanceCount, (uint)firstIndex, baseVertex, (uint)firstInstance);
-        }
-        else
-        {
-            _context->DrawIndexed((uint)indexCount, (uint)firstIndex, baseVertex);
-        }
+        _commandList.Get()->DrawIndexedInstanced((uint)indexCount, (uint)instanceCount, (uint)firstIndex, baseVertex, (uint)firstInstance);
     }
 
     private void PrepareDispatch()
     {
-        if (_numCBVBindings > 0)
-        {
-            fixed (ID3D11Buffer** cbvsPtr = _constantBuffers)
-            {
-                _context->CSSetConstantBuffers(0, _numCBVBindings, cbvsPtr);
-            }
-        }
-
-        if (_numSRVBindings > 0)
-        {
-            fixed (ID3D11ShaderResourceView** srvPtr = _srvs)
-            {
-                _context->CSSetShaderResources(0, _numSRVBindings, srvPtr);
-            }
-        }
-
-        if (_numUAVBindings > 0)
-        {
-            fixed (ID3D11UnorderedAccessView** uavPtr = _uavs)
-            {
-                _context->CSSetUnorderedAccessViews(0, _numUAVBindings, uavPtr, null);
-            }
-        }
-
-        if (_numSamplerBindings > 0)
-        {
-            fixed (ID3D11SamplerState** samplerPtr = _samplers)
-            {
-                _context->CSSetSamplers(0, _numSamplerBindings, samplerPtr);
-            }
-        }
-
-        _numCBVBindings = 0;
-        _numSRVBindings = 0;
-        _numUAVBindings = 0;
-        _numSamplerBindings = 0;
+        
     }
 
     private void PrepareDraw()
     {
-        if (_currentPipeline!.NumVertexBindings > 0)
-        {
-            fixed (ID3D11Buffer** vbo = _vertexBindings)
-            fixed (uint* offsets = _vertexOffsets)
-            {
-                _context->IASetVertexBuffers(0, _currentPipeline.NumVertexBindings, vbo, _currentPipeline.Strides, offsets);
-            }
-        }
-
-        if (_numCBVBindings > 0)
-        {
-            fixed (ID3D11Buffer** cbvsPtr = _constantBuffers)
-            {
-                _context->VSSetConstantBuffers(0, _numCBVBindings, cbvsPtr);
-                _context->PSSetConstantBuffers(0, _numCBVBindings, cbvsPtr);
-            }
-        }
-
-        if (_numSRVBindings > 0)
-        {
-            fixed (ID3D11ShaderResourceView** srvPtr = _srvs)
-            {
-                _context->PSSetShaderResources(0, _numSRVBindings, srvPtr);
-            }
-        }
-
-        //if (_numUAVBindings > 0)
-        //{
-        //    fixed (ID3D11UnorderedAccessView** uavPtr = _uavs)
-        //    {
-        //        _context->PSSetUnorderedAccessViews(0, _numUAVBindings, uavPtr, null);
-        //    }
-        //}
-
-        if (_numSamplerBindings > 0)
-        {
-            fixed (ID3D11SamplerState** samplerPtr = _samplers)
-            {
-                _context->PSSetSamplers(0, _numSamplerBindings, samplerPtr);
-            }
-        }
-
-        _numCBVBindings = 0;
-        _numSRVBindings = 0;
-        _numUAVBindings = 0;
-        _numSamplerBindings = 0;
+       
     }
 }

@@ -2,22 +2,22 @@
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using Win32;
-using Win32.Graphics.Direct3D11;
-using D3D11SamplerDesc = Win32.Graphics.Direct3D11.SamplerDescription;
-using static Win32.Graphics.Direct3D11.Apis;
+using Win32.Graphics.Direct3D12;
+using D3D11SamplerDesc = Win32.Graphics.Direct3D12.SamplerDescription;
+using static Win32.Graphics.Direct3D12.Apis;
 
 namespace Alimer.Graphics.D3D12;
 
 internal sealed unsafe class D3D12Sampler : Sampler
 {
-    private readonly ComPtr<ID3D11SamplerState> _handle;
+    private readonly CpuDescriptorHandle _handle;
 
     public D3D12Sampler(D3D12GraphicsDevice device, in SamplerDescription description)
         : base(device, description)
     {
-        FilterType minFilter = description.MinFilter.ToD3D11();
-        FilterType magFilter = description.MagFilter.ToD3D11();
-        FilterType mipmapFilter = description.MipFilter.ToD3D11();
+        FilterType minFilter = description.MinFilter.ToD3D12();
+        FilterType magFilter = description.MagFilter.ToD3D12();
+        FilterType mipmapFilter = description.MipFilter.ToD3D12();
 
         FilterReductionType reduction = description.Compare != CompareFunction.Never ? FilterReductionType.Comparison : FilterReductionType.Standard;
 
@@ -34,13 +34,13 @@ internal sealed unsafe class D3D12Sampler : Sampler
             d3dDesc.Filter = EncodeBasicFilter(minFilter, magFilter, mipmapFilter, reduction);
         }
 
-        d3dDesc.AddressU = description.AddressModeU.ToD3D11();
-        d3dDesc.AddressV = description.AddressModeV.ToD3D11();
-        d3dDesc.AddressW = description.AddressModeW.ToD3D11();
+        d3dDesc.AddressU = description.AddressModeU.ToD3D12();
+        d3dDesc.AddressV = description.AddressModeV.ToD3D12();
+        d3dDesc.AddressW = description.AddressModeW.ToD3D12();
         d3dDesc.MipLODBias = 0.0f;
         if (description.Compare != CompareFunction.Never)
         {
-            d3dDesc.ComparisonFunc = description.Compare.ToD3D11();
+            d3dDesc.ComparisonFunc = description.Compare.ToD3D12();
         }
         else
         {
@@ -50,19 +50,10 @@ internal sealed unsafe class D3D12Sampler : Sampler
         d3dDesc.MinLOD = description.LodMinClamp;
         d3dDesc.MaxLOD = description.LodMaxClamp;
 
-        HResult hr = device.NativeDevice->CreateSamplerState(&d3dDesc, _handle.GetAddressOf());
-        if (hr.Failure)
-        {
-            throw new InvalidOperationException("D3D11: Failed to create sampler state");
-        }
-
-        if (!string.IsNullOrEmpty(description.Label))
-        {
-            _handle.Get()->SetDebugName(description.Label);
-        }
+        //device.NativeDevice->CreateSampler(&d3dDesc, _handle);
     }
 
-    public ID3D11SamplerState* Handle => _handle.Get();
+    public CpuDescriptorHandle Handle => _handle;
 
     protected override void Dispose(bool disposing)
     {
@@ -70,12 +61,7 @@ internal sealed unsafe class D3D12Sampler : Sampler
 
         if (disposing)
         {
-            _handle.Dispose();
+           // _handle.Dispose();
         }
-    }
-
-    protected override void OnLabelChanged(string newLabel)
-    {
-        Handle->SetDebugName(newLabel);
     }
 }

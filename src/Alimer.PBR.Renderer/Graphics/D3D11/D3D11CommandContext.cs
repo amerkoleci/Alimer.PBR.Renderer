@@ -60,10 +60,7 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
 
     public override void PushDebugGroup(string groupLabel)
     {
-        fixed (char* groupLabelPtr = groupLabel)
-        {
-            _annotation.Get()->BeginEvent((ushort*)groupLabelPtr);
-        }
+        _annotation.Get()->BeginEvent(groupLabel);
     }
 
     public override void PopDebugGroup()
@@ -73,10 +70,7 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
 
     public override void InsertDebugMarker(string debugLabel)
     {
-        fixed (char* debugLabelPtr = debugLabel)
-        {
-            _annotation.Get()->SetMarker((ushort*)debugLabelPtr);
-        }
+        _annotation.Get()->SetMarker(debugLabel);
     }
 
     protected override void BeginRenderPassCore(in RenderPassDescriptor renderPass)

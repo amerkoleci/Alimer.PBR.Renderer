@@ -1,14 +1,8 @@
 ﻿// Copyright © Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
-using Win32.Graphics.Direct3D11;
 using Win32.Graphics.Dxgi.Common;
-using D3D11StencilOperation = Win32.Graphics.Direct3D11.StencilOperation;
 using D3DPrimitiveTopology = Win32.Graphics.Direct3D.PrimitiveTopology;
-using D3D11CullMode = Win32.Graphics.Direct3D11.CullMode;
-using D3D11FillMode = Win32.Graphics.Direct3D11.FillMode;
-using D3D11BlendOperation = Win32.Graphics.Direct3D11.BlendOperation;
-using System.Diagnostics;
 
 namespace Alimer.Graphics;
 
