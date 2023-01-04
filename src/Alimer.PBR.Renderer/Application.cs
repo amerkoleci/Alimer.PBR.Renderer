@@ -192,11 +192,7 @@ public sealed class Application : GraphicsObject
             FragmentShader = CompileShader("skybox.hlsl", "fragmentMain", "ps_5_0"),
             VertexDescriptor = new(new VertexLayoutDescriptor((uint)VertexMesh.SizeInBytes, new VertexAttributeDescriptor(VertexFormat.Float32x3, 0))),
             RasterizerState = rasterizerState,
-            DepthStencilState = new()
-            {
-                DepthWriteEnabled = false,
-                DepthCompare = CompareFunction.Always
-            }
+            DepthStencilState = DepthStencilState.DepthNone
         };
         _skyboxPipeline = AddDisposable(_graphicsDevice.CreateRenderPipeline(skyboxPipelineDesc));
 
@@ -205,7 +201,8 @@ public sealed class Application : GraphicsObject
             Label = "Tonemap",
             VertexShader = CompileShader("tonemap.hlsl", "vertexMain", "vs_5_0"),
             FragmentShader = CompileShader("tonemap.hlsl", "fragmentMain", "ps_5_0"),
-            RasterizerState = rasterizerState
+            RasterizerState = RasterizerState.CullNone,
+            DepthStencilState = DepthStencilState.DepthNone
         };
         _tonemapPipeline = AddDisposable(_graphicsDevice.CreateRenderPipeline(tonemapPipelineDesc));
 

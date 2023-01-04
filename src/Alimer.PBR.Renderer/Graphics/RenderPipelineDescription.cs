@@ -10,8 +10,9 @@ public readonly record struct RenderPipelineDescription
 {
     public RenderPipelineDescription()
     {
-        RasterizerState = new();
-        DepthStencilState = new();
+        BlendState = BlendState.Opaque;
+        RasterizerState = RasterizerState.CullBack;
+        DepthStencilState = DepthStencilState.DepthDefault;
         PrimitiveTopology = PrimitiveTopology.TriangleList;
     }
 
@@ -19,11 +20,12 @@ public readonly record struct RenderPipelineDescription
 
     public ReadOnlyMemory<byte> FragmentShader { get; init; }
 
-    public VertexDescriptor VertexDescriptor { get; init; }
+    public BlendState BlendState { get; init; }
 
     public RasterizerState RasterizerState { get; init; }
 
     public DepthStencilState DepthStencilState { get; init; }
+    public VertexDescriptor VertexDescriptor { get; init; }
 
     public PrimitiveTopology PrimitiveTopology { get; init; }
 

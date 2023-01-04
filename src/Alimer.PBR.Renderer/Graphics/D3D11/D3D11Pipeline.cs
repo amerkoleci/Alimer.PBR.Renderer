@@ -16,8 +16,9 @@ internal sealed unsafe class D3D11Pipeline : Pipeline
     private readonly uint _numVertexBindings = 0;
     private readonly uint[] _strides = new uint[8];
 
-    private readonly ComPtr<ID3D11DepthStencilState> _depthStencilState = default;
+    private readonly ComPtr<ID3D11BlendState> _blendState = default;
     private readonly ComPtr<ID3D11RasterizerState> _rasterizerState = default;
+    private readonly ComPtr<ID3D11DepthStencilState> _depthStencilState = default;
 
     private readonly ComPtr<ID3D11ComputeShader> _cs = default;
 
@@ -95,20 +96,27 @@ internal sealed unsafe class D3D11Pipeline : Pipeline
             }
         }
 
-        Win32.Graphics.Direct3D11.DepthStencilDescription depthStencilDesc = new()
+        BlendDescription blendDesc = new()
         {
-            DepthEnable = description.DepthStencilState.DepthCompare != CompareFunction.Always || description.DepthStencilState.DepthWriteEnabled,
-            DepthWriteMask = description.DepthStencilState.DepthWriteEnabled ? DepthWriteMask.All : DepthWriteMask.Zero,
-            DepthFunc = description.DepthStencilState.DepthCompare.ToD3D11(),
-            StencilEnable = Utilities.StencilTestEnabled(description.DepthStencilState),
-            StencilReadMask = description.DepthStencilState.StencilReadMask,
-            StencilWriteMask = description.DepthStencilState.StencilWriteMask,
-            FrontFace = description.DepthStencilState.FrontFace.ToD3D11(),
-            BackFace = description.DepthStencilState.BackFace.ToD3D11()
+            AlphaToCoverageEnable = description.BlendState.AlphaToCoverageEnabled,
+            IndependentBlendEnable = true,
         };
-        ThrowIfFailed(device.NativeDevice->CreateDepthStencilState(&depthStencilDesc, _depthStencilState.GetAddressOf()));
+        for (int i = 0; i < description.BlendState.RenderTargets.Length; i++)
+        {
+            ref RenderTargetBlendState renderTarget = ref description.BlendState.RenderTargets[i];
 
-        Win32.Graphics.Direct3D11.RasterizerDescription rasterizerDesc = new()
+            blendDesc.RenderTarget[i].BlendEnable = Utilities.BlendEnabled(renderTarget);
+            blendDesc.RenderTarget[i].SrcBlend = renderTarget.SourceColorBlendFactor.ToD3D11();
+            blendDesc.RenderTarget[i].DestBlend = renderTarget.DestinationColorBlendFactor.ToD3D11();
+            blendDesc.RenderTarget[i].BlendOp = renderTarget.BlendOperation.ToD3D11();
+            blendDesc.RenderTarget[i].SrcBlendAlpha = renderTarget.SourceAlphaBlendFactor.ToD3D11AlphaBlend();
+            blendDesc.RenderTarget[i].DestBlendAlpha = renderTarget.DestinationAlphaBlendFactor.ToD3D11AlphaBlend();
+            blendDesc.RenderTarget[i].BlendOpAlpha = renderTarget.AlphaBlendOperation.ToD3D11();
+            blendDesc.RenderTarget[i].RenderTargetWriteMask = renderTarget.WriteMask.ToD3D11();
+        }
+        ThrowIfFailed(device.NativeDevice->CreateBlendState(&blendDesc, _blendState.GetAddressOf()));
+
+        RasterizerDescription rasterizerDesc = new()
         {
             FillMode = description.RasterizerState.FillMode.ToD3D11(),
             CullMode = description.RasterizerState.CullMode.ToD3D11(),
@@ -123,6 +131,19 @@ internal sealed unsafe class D3D11Pipeline : Pipeline
         };
         ThrowIfFailed(device.NativeDevice->CreateRasterizerState(&rasterizerDesc, _rasterizerState.GetAddressOf()));
 
+        DepthStencilDescription depthStencilDesc = new()
+        {
+            DepthEnable = description.DepthStencilState.DepthCompare != CompareFunction.Always || description.DepthStencilState.DepthWriteEnabled,
+            DepthWriteMask = description.DepthStencilState.DepthWriteEnabled ? DepthWriteMask.All : DepthWriteMask.Zero,
+            DepthFunc = description.DepthStencilState.DepthCompare.ToD3D11(),
+            StencilEnable = Utilities.StencilTestEnabled(description.DepthStencilState),
+            StencilReadMask = description.DepthStencilState.StencilReadMask,
+            StencilWriteMask = description.DepthStencilState.StencilWriteMask,
+            FrontFace = description.DepthStencilState.FrontFace.ToD3D11(),
+            BackFace = description.DepthStencilState.BackFace.ToD3D11()
+        };
+        ThrowIfFailed(device.NativeDevice->CreateDepthStencilState(&depthStencilDesc, _depthStencilState.GetAddressOf()));
+
         PrimitiveTopology = description.PrimitiveTopology.ToD3D11();
     }
 
@@ -132,8 +153,9 @@ internal sealed unsafe class D3D11Pipeline : Pipeline
     public uint NumVertexBindings => _numVertexBindings;
     public uint* Strides => UnsafeUtilities.GetPointer(_strides.AsSpan());
 
-    public ID3D11DepthStencilState* DepthStencilState => _depthStencilState;
+    public ID3D11BlendState* BlendState => _blendState;
     public ID3D11RasterizerState* RasterizerState => _rasterizerState;
+    public ID3D11DepthStencilState* DepthStencilState => _depthStencilState;
     public D3DPrimitiveTopology PrimitiveTopology { get; }
     public ID3D11ComputeShader* CS => _cs;
 
@@ -148,8 +170,9 @@ internal sealed unsafe class D3D11Pipeline : Pipeline
             _vs.Dispose();
             _ps.Dispose();
             _inputLayout.Dispose();
-            _depthStencilState.Dispose();
+            _blendState.Dispose();
             _rasterizerState.Dispose();
+            _depthStencilState.Dispose();
         }
     }
 }

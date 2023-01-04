@@ -20,8 +20,9 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
     private readonly ComPtr<ID3DUserDefinedAnnotation> _annotation;
 
     private D3D11Pipeline? _currentPipeline;
-    private ID3D11DepthStencilState* _currentDepthStencilState;
+    private ID3D11BlendState* _currentBlendState;
     private ID3D11RasterizerState* _currentRasterizerState;
+    private ID3D11DepthStencilState* _currentDepthStencilState;
     private D3DPrimitiveTopology _currentPrimitiveTopology;
 
     private RenderPassDescriptor _currentRenderPass;
@@ -278,16 +279,22 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
             _context->PSSetShader(d3d11Pipeline.PS);
             _context->IASetInputLayout(d3d11Pipeline.InputLayout);
 
-            if (_currentDepthStencilState != d3d11Pipeline.DepthStencilState)
+            if (_currentBlendState != d3d11Pipeline.BlendState)
             {
-                _currentDepthStencilState = d3d11Pipeline.DepthStencilState;
-                _context->OMSetDepthStencilState(_currentDepthStencilState, 0);
+                _currentBlendState = d3d11Pipeline.BlendState;
+                _context->OMSetBlendState(_currentBlendState);
             }
 
             if (_currentRasterizerState != d3d11Pipeline.RasterizerState)
             {
                 _currentRasterizerState = d3d11Pipeline.RasterizerState;
                 _context->RSSetState(_currentRasterizerState);
+            }
+
+            if (_currentDepthStencilState != d3d11Pipeline.DepthStencilState)
+            {
+                _currentDepthStencilState = d3d11Pipeline.DepthStencilState;
+                _context->OMSetDepthStencilState(_currentDepthStencilState, 0);
             }
 
             if (_currentPrimitiveTopology != d3d11Pipeline.PrimitiveTopology)

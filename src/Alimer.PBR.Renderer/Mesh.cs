@@ -118,10 +118,9 @@ public sealed class Mesh : GraphicsObject
                     Vector3 position = positionAccessor[i];
                     Vector3 normal = normalAccessor[i];
                     Vector3 tangent = hasTangent ? tangentAccessor[i]! : Vector3.Zero;
-                    Vector3 bitangent = Vector3.Zero;
                     Vector2 texcoord = texcoordAccessor[i];
 
-                    vertices.Add(new VertexMesh(position, normal, tangent, bitangent, texcoord));
+                    vertices.Add(new VertexMesh(position, normal, tangent, texcoord));
                 }
 
               
@@ -164,13 +163,11 @@ public sealed class Mesh : GraphicsObject
             Vector3 position = mesh->MVertices[i];
             Vector3 normal = mesh->MNormals[i];
             Vector3 tangent = Vector3.Zero;
-            Vector3 bitangent = Vector3.Zero;
             Vector2 texcoord = Vector2.Zero;
 
             if (hasTangentsAndBitangents)
             {
                 tangent = mesh->MTangents[i];
-                bitangent = mesh->MBitangents[i];
             }
 
             if (hasHasTexCoords0)
@@ -178,7 +175,7 @@ public sealed class Mesh : GraphicsObject
                 texcoord = new Vector2(mesh->MTextureCoords[0][i].X, 1.0f - mesh->MTextureCoords[0][i].Y);
             }
 
-            vertices.Add(new VertexMesh(position, normal, tangent, bitangent, texcoord));
+            vertices.Add(new VertexMesh(position, normal, tangent, texcoord));
         }
 
         for (int i = 0; i < (int)mesh->MNumFaces; ++i)

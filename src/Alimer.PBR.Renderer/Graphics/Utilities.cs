@@ -56,17 +56,28 @@ public static class Utilities
 
     public static uint GetSizeInBytes(this VertexFormat format) => GetFormatInfo(format).ByteSize;
 
-    public static bool StencilTestEnabled(in DepthStencilState depthStencil)
+    public static bool BlendEnabled(in RenderTargetBlendState state)
     {
         return
-            depthStencil.BackFace.CompareFunction != CompareFunction.Always ||
-            depthStencil.BackFace.FailOperation != StencilOperation.Keep ||
-            depthStencil.BackFace.DepthFailOperation != StencilOperation.Keep ||
-            depthStencil.BackFace.PassOperation != StencilOperation.Keep ||
-            depthStencil.FrontFace.CompareFunction != CompareFunction.Always ||
-            depthStencil.FrontFace.FailOperation != StencilOperation.Keep ||
-            depthStencil.FrontFace.DepthFailOperation != StencilOperation.Keep ||
-            depthStencil.FrontFace.PassOperation != StencilOperation.Keep;
+            state.BlendOperation != BlendOperation.Add ||
+            state.SourceColorBlendFactor != BlendFactor.One ||
+            state.DestinationColorBlendFactor != BlendFactor.Zero ||
+            state.AlphaBlendOperation != BlendOperation.Add ||
+            state.SourceAlphaBlendFactor != BlendFactor.One ||
+            state.DestinationAlphaBlendFactor != BlendFactor.Zero;
+    }
+
+    public static bool StencilTestEnabled(in DepthStencilState state)
+    {
+        return
+            state.BackFace.CompareFunction != CompareFunction.Always ||
+            state.BackFace.FailOperation != StencilOperation.Keep ||
+            state.BackFace.DepthFailOperation != StencilOperation.Keep ||
+            state.BackFace.PassOperation != StencilOperation.Keep ||
+            state.FrontFace.CompareFunction != CompareFunction.Always ||
+            state.FrontFace.FailOperation != StencilOperation.Keep ||
+            state.FrontFace.DepthFailOperation != StencilOperation.Keep ||
+            state.FrontFace.PassOperation != StencilOperation.Keep;
     }
 
     public static int CalculateMipLevels(int width, int height, int mipLevels)

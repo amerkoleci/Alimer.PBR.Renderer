@@ -32,8 +32,7 @@ struct VertexInput {
 	float3 position  : ATTRIBUTE0;
 	float3 normal    : ATTRIBUTE1;
 	float4 tangent   : ATTRIBUTE2;
-	float3 bitangent : ATTRIBUTE3;
-	float2 texcoord  : ATTRIBUTE4;
+	float2 texcoord  : ATTRIBUTE3;
 };
 
 struct VertexOutput {

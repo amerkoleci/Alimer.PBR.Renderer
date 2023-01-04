@@ -4,7 +4,6 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Alimer.Graphics;
-using Vortice.Mathematics;
 
 namespace Alimer.PBR.Renderer;
 
@@ -18,23 +17,20 @@ public readonly record struct VertexMesh
         new VertexAttributeDescriptor(VertexFormat.Float32x3, 0),
         new VertexAttributeDescriptor(VertexFormat.Float32x3, 12),
         new VertexAttributeDescriptor(VertexFormat.Float32x3, 24),
-        new VertexAttributeDescriptor(VertexFormat.Float32x3, 36),
-        new VertexAttributeDescriptor(VertexFormat.Float32x2, 48)
+        new VertexAttributeDescriptor(VertexFormat.Float32x2, 36)
     };
 
-    public VertexMesh(in Vector3 position, in Vector3 normal, in Vector3 tangent, in Vector3 bitangent, in Vector2 texcoord)
+    public VertexMesh(in Vector3 position, in Vector3 normal, in Vector3 tangent, in Vector2 texcoord)
     {
         Position = position;
         Normal = normal;
         Tangent = tangent;
-        Bitangent = bitangent;
         Texcoord = texcoord;
     }
 
     public readonly Vector3 Position;
     public readonly Vector3 Normal;
     public readonly Vector3 Tangent;
-    public readonly Vector3 Bitangent;
     public readonly Vector2 Texcoord;
 }
 

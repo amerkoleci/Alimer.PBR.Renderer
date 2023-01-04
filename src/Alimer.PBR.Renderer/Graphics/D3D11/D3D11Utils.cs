@@ -7,6 +7,8 @@ using D3D11StencilOperation = Win32.Graphics.Direct3D11.StencilOperation;
 using D3DPrimitiveTopology = Win32.Graphics.Direct3D.PrimitiveTopology;
 using D3D11CullMode = Win32.Graphics.Direct3D11.CullMode;
 using D3D11FillMode = Win32.Graphics.Direct3D11.FillMode;
+using D3D11BlendOperation = Win32.Graphics.Direct3D11.BlendOperation;
+using System.Diagnostics;
 
 namespace Alimer.Graphics.D3D11;
 
@@ -23,8 +25,31 @@ internal static class D3D11Utils
         D3D11CullMode.None,
     };
 
-    
-    private static readonly D3D11StencilOperation[] s_stencilOperationMap = new D3D11StencilOperation[(int)StencilOperation.Count] {
+    private static readonly Blend[] s_blendFactorMap = new Blend[(int)(BlendFactor.OneMinusBlendColor + 1)] {
+        Blend.Zero,
+        Blend.One,
+        Blend.SrcColor,
+        Blend.InverseSrcColor,
+        Blend.SrcAlpha,
+        Blend.InverseSrcAlpha,
+        Blend.DestColor,
+        Blend.InverseDestColor,
+        Blend.DestAlpha,
+        Blend.InverseDestAlpha,
+        Blend.SrcAlphaSaturate,
+        Blend.BlendFactor,
+        Blend.InverseBlendFactor
+    };
+
+    private static readonly D3D11BlendOperation[] s_blendOpMap = new D3D11BlendOperation[(int)(BlendOperation.Max + 1)] {
+        D3D11BlendOperation.Add,
+        D3D11BlendOperation.Subtract,
+        D3D11BlendOperation.ReverseSubtract,
+        D3D11BlendOperation.Min,
+        D3D11BlendOperation.Max,
+    };
+
+    private static readonly D3D11StencilOperation[] s_stencilOperationMap = new D3D11StencilOperation[(int)(StencilOperation.DecrementWrap + 1)] {
         D3D11StencilOperation.Keep,
         D3D11StencilOperation.Zero,
         D3D11StencilOperation.Replace,
@@ -179,6 +204,39 @@ internal static class D3D11Utils
 
     public static D3D11FillMode ToD3D11(this FillMode value) => s_FillModeMap[(uint)value];
     public static D3D11CullMode ToD3D11(this CullMode value) => s_cullModeMap[(uint)value];
+    public static Blend ToD3D11(this BlendFactor factor) => s_blendFactorMap[(uint)factor];
+    public static D3D11BlendOperation ToD3D11(this BlendOperation value) => s_blendOpMap[(uint)value];
+    public static Blend ToD3D11AlphaBlend(this BlendFactor factor)
+    {
+        switch (factor)
+        {
+            case BlendFactor.SourceColor:
+                return Blend.SrcAlpha;
+            case BlendFactor.OneMinusSourceColor:
+                return Blend.InverseSrcAlpha;
+            case BlendFactor.DestinationColor:
+                return Blend.DestAlpha;
+            case BlendFactor.OneMinusDestinationColor:
+                return Blend.InverseDestAlpha;
+            //case BlendFactor.Source1Color:
+            //    return Blend.Src1Alpha;
+            //case BlendFactor.OneMinusSource1Color:
+            //    return Blend.InverseSrc1Alpha;
+            // Other blend factors translate to the same D3D12 enum as the color blend factors.
+            default:
+                return ToD3D11(factor);
+        }
+    }
+
+    public static ColorWriteEnable ToD3D11(this ColorWriteMask writeMask)
+    {
+        Debug.Assert((byte)ColorWriteMask.Red == (byte)ColorWriteEnable.Red);
+        Debug.Assert((byte)ColorWriteMask.Green == (byte)ColorWriteEnable.Green);
+        Debug.Assert((byte)ColorWriteMask.Blue == (byte)ColorWriteEnable.Blue);
+        Debug.Assert((byte)ColorWriteMask.Alpha == (byte)ColorWriteEnable.Alpha);
+
+        return (ColorWriteEnable)writeMask;
+    }
 
     public static D3DPrimitiveTopology ToD3D11(this PrimitiveTopology value)
     {

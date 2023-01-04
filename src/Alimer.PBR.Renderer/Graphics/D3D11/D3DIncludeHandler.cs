@@ -69,8 +69,14 @@ internal unsafe struct D3DIncludeHandler : D3DIncludeHandler.Interface
     [UnmanagedCallersOnly]
     public static int Open(D3DIncludeHandler* @this, IncludeType IncludeType, sbyte* pFileName, void* pParentData, void** ppData, uint* pBytes)
     {
-        string fileName = new string(pFileName);
-        string fullPath = Path.Combine(IncludeDirectory, fileName);
+        string fileName = new(pFileName);
+
+        string fullPath = Path.Combine(AppContext.BaseDirectory, fileName);
+        if (!string.IsNullOrEmpty(IncludeDirectory))
+        {
+            fullPath = Path.Combine(IncludeDirectory, fileName);
+        }
+
         if (File.Exists(fullPath))
         {
             Span<byte> fileData = File.ReadAllBytes(fullPath);

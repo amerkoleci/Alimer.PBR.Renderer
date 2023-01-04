@@ -40,6 +40,4 @@ public enum StencilOperation
     /// Decrements stencil value by one, wrapping on underflow.
     /// </summary>
     DecrementWrap = 7,
-
-    Count
 }

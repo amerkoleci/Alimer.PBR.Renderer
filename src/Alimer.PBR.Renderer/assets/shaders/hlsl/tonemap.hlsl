@@ -15,21 +15,21 @@ struct VertexOutput {
 Texture2D sceneColor: register(t0);
 SamplerState defaultSampler : register(s0);
 
-VertexOutput vertexMain(uint vertexID : SV_VertexID)
+VertexOutput vertexMain(in uint vertexID : SV_VertexID)
 {
     VertexOutput output;
 
 	if(vertexID == 0) {
-        output.texcoord = float2(1.0f, -1.0f);
-        output.position = float4(1.0f, 3.0f, 0.0f, 1.0f);
+        output.position = float4(-1.0f, 1.0f, 1.0f, 1.0f);
+        output.texcoord = float2(0.0f, 0.0f);
 	}
 	else if(vertexID == 1) {
-        output.texcoord = float2(-1.0f, 1.0f);
-        output.position = float4(-3.0f, -1.0, 0.0f, 1.0f);
+        output.position = float4(3.0f, 1.0f, 1.0f, 1.0f);
+        output.texcoord = float2(2.0f, 0.0f);
 	}
 	else /* if(vertexID == 2) */ {
-        output.texcoord = float2(1.0f, 1.0f);
-        output.position = float4(1.0f, -1.0f, 0.0f, 1.0f);
+        output.position = float4(-1.0f, -3.0f, 1.0f, 1.0f);
+        output.texcoord = float2(0.0f, 2.0f);
 	}
 
 	return output;

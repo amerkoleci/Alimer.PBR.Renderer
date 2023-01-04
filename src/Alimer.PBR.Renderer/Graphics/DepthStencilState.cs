@@ -8,7 +8,7 @@ public readonly record struct DepthStencilState
     public DepthStencilState()
     {
         DepthWriteEnabled = true;
-        DepthCompare = CompareFunction.Less;
+        DepthCompare = CompareFunction.LessEqual;
         StencilReadMask = 0xFF;
         StencilWriteMask = 0xFF;
 
@@ -24,4 +24,34 @@ public readonly record struct DepthStencilState
 
     public StencilFaceState FrontFace { get; init; }
     public StencilFaceState BackFace { get; init; }
+
+    public static readonly DepthStencilState DepthNone = new()
+    {
+        DepthWriteEnabled = false,
+        DepthCompare = CompareFunction.Always,
+    };
+
+    public static readonly DepthStencilState DepthDefault = new()
+    {
+        DepthWriteEnabled = true,
+        DepthCompare = CompareFunction.LessEqual,
+    };
+
+    public static readonly DepthStencilState DepthRead = new()
+    {
+        DepthWriteEnabled = false,
+        DepthCompare = CompareFunction.LessEqual,
+    };
+
+    public static readonly DepthStencilState DepthReverseZ = new()
+    {
+        DepthWriteEnabled = true,
+        DepthCompare = CompareFunction.GreaterEqual,
+    };
+
+    public static readonly DepthStencilState DepthReadReverseZ = new()
+    {
+        DepthWriteEnabled = true,
+        DepthCompare = CompareFunction.GreaterEqual,
+    };
 }
