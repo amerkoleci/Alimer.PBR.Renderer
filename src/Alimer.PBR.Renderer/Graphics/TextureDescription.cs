@@ -20,7 +20,7 @@ public readonly record struct TextureDescription
         int depthOrArrayLayers,
         int mipLevels = 1,
         TextureUsage usage = TextureUsage.ShaderRead,
-        int sampleCount = 1,
+        TextureSampleCount sampleCount = TextureSampleCount.Count1,
         string? label = default)
     {
         Guard.IsTrue(format != TextureFormat.Invalid);
@@ -77,7 +77,7 @@ public readonly record struct TextureDescription
     /// <summary>
     /// Gets the texture sample count.
     /// </summary>
-    public int SampleCount { get; init; } = 1;
+    public TextureSampleCount SampleCount { get; init; } = TextureSampleCount.Count1;
 
     /// <summary>
     /// Gets the label of <see cref="Texture"/>.
@@ -90,7 +90,7 @@ public readonly record struct TextureDescription
         int height,
         int mipLevels,
         TextureUsage usage = TextureUsage.ShaderRead,
-        int sampleCount = 1)
+        TextureSampleCount sampleCount = TextureSampleCount.Count1)
     {
         return new TextureDescription(
             TextureDimension.Texture2D,
@@ -111,7 +111,7 @@ public readonly record struct TextureDescription
         int mipLevels,
         int arrayLayers,
         TextureUsage usage = TextureUsage.ShaderRead,
-        int sampleCount = 1)
+        TextureSampleCount sampleCount = TextureSampleCount.Count1)
     {
         return new TextureDescription(
             TextureDimension.Texture2D,
@@ -140,7 +140,7 @@ public readonly record struct TextureDescription
             1,
             mipLevels,
             usage,
-            1
+            TextureSampleCount.Count1
             );
     }
 }

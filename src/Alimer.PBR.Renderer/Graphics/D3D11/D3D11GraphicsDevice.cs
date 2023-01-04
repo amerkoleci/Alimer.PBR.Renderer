@@ -41,9 +41,9 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
 
     public override Texture ColorTexture => _colorTexture!;
 
-    public override int Samples { get; }
+    public override TextureSampleCount SampleCount { get; }
 
-    public D3D11GraphicsDevice(in SDL_Window window, int maxSamples = 4)
+    public D3D11GraphicsDevice(in SDL_Window window, TextureSampleCount maxSamples = TextureSampleCount.Count4)
         : base(window, GraphicsBackend.Direct3D11)
     {
 #if DEBUG
@@ -182,7 +182,7 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
         }
 
         DefaultContext = new D3D11CommandContext(this);
-        Samples = (int)samples;
+        SampleCount = (TextureSampleCount)samples;
 
         // Create SwapChain
         {

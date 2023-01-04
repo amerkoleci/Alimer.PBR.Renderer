@@ -67,7 +67,7 @@ public abstract class CommandContext : GraphicsObject
     public void Dispatch1D(int threadCountX, int groupSizeX = 64)
     {
         Dispatch(
-            Utilities.DivideByMultiple(threadCountX, groupSizeX),
+            UnsafeUtilities.DivideByMultiple(threadCountX, groupSizeX),
             1,
             1);
     }
@@ -75,8 +75,8 @@ public abstract class CommandContext : GraphicsObject
     public void Dispatch2D(int threadCountX, int threadCountY, int groupSizeX = 8, int groupSizeY = 8)
     {
         Dispatch(
-            Utilities.DivideByMultiple(threadCountX, groupSizeX),
-            Utilities.DivideByMultiple(threadCountY, groupSizeX),
+            UnsafeUtilities.DivideByMultiple(threadCountX, groupSizeX),
+            UnsafeUtilities.DivideByMultiple(threadCountY, groupSizeX),
             1
         );
     }
@@ -84,9 +84,9 @@ public abstract class CommandContext : GraphicsObject
     public void Dispatch3D(int threadCountX, int threadCountY, int threadCountZ, int groupSizeX, int groupSizeY, int groupSizeZ)
     {
         Dispatch(
-            Utilities.DivideByMultiple(threadCountX, groupSizeX),
-            Utilities.DivideByMultiple(threadCountY, groupSizeY),
-            Utilities.DivideByMultiple(threadCountZ, groupSizeZ)
+            UnsafeUtilities.DivideByMultiple(threadCountX, groupSizeX),
+            UnsafeUtilities.DivideByMultiple(threadCountY, groupSizeY),
+            UnsafeUtilities.DivideByMultiple(threadCountZ, groupSizeZ)
         );
     }
 

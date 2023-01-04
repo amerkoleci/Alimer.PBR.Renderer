@@ -31,17 +31,17 @@ cbuffer ShadingConstants : register(b1)
 struct VertexInput {
 	float3 position  : ATTRIBUTE0;
 	float3 normal    : ATTRIBUTE1;
-	float3 tangent   : ATTRIBUTE2;
+	float4 tangent   : ATTRIBUTE2;
 	float3 bitangent : ATTRIBUTE3;
 	float2 texcoord  : ATTRIBUTE4;
 };
 
-struct PixelShaderInput
-{
-	float4 pixelPosition : SV_POSITION;
-	float3 position : POSITION;
+struct VertexOutput {
+	float3 worldPosition : POSITION;
+    float3 normal : NORMAL;
 	float2 texcoord : TEXCOORD;
 	float3x3 tangentBasis : TBASIS;
+	float4 position : SV_POSITION;
 };
 
 Texture2D albedoTexture : register(t0);
@@ -95,38 +95,51 @@ uint querySpecularTextureLevels()
 }
 
 // Vertex shader
-PixelShaderInput vertexMain(in VertexInput input)
+VertexOutput vertexMain(in VertexInput input)
 {
-	PixelShaderInput vout;
+    VertexOutput output;
 
     float4 position = float4(input.position, 1.0f);
 
-	vout.position = mul(sceneRotationMatrix, position).xyz;
-	vout.texcoord = float2(input.texcoord.x, 1.0f - input.texcoord.y);
+    output.worldPosition = mul(sceneRotationMatrix, position).xyz;
+    output.texcoord = input.texcoord;
+
+    float3 normalVector = mul((float3x3) sceneRotationMatrix, input.normal);
+    normalVector = normalize(normalVector);
 
 	// Pass tangent space basis vectors (for normal mapping).
-	float3x3 TBN = float3x3(input.tangent, input.bitangent, input.normal);
-	vout.tangentBasis = mul((float3x3)sceneRotationMatrix, transpose(TBN));
+    float3 tangentVector = mul((float3x3) sceneRotationMatrix, input.tangent.xyz);
+    tangentVector = normalize(tangentVector);
+
+    float3 bitangentVector = normalize(cross(normalVector, tangentVector) * input.tangent.w);
+
+    float3x3 tbnMatrix = float3x3(
+        tangentVector.x, bitangentVector.x, normalVector.x,
+        tangentVector.y, bitangentVector.y, normalVector.y,
+        tangentVector.z, bitangentVector.z, normalVector.z);
+
+    output.tangentBasis = tbnMatrix;
     
 	float4x4 mvpMatrix = mul(viewProjectionMatrix, sceneRotationMatrix);
-	vout.pixelPosition = mul(mvpMatrix, position);
-	return vout;
+    output.position = mul(mvpMatrix, position);
+	return output;
 }
 
-// Pixel shader
-float4 fragmentMain(PixelShaderInput pin) : SV_Target
+// Fragment shader
+float4 fragmentMain(in VertexOutput input) : SV_Target
 {
 	// Sample input textures to get shading model params.
-	float3 albedo = albedoTexture.Sample(defaultSampler, pin.texcoord).rgb;
-	float metalness = metalnessTexture.Sample(defaultSampler, pin.texcoord).r;
-	float roughness = roughnessTexture.Sample(defaultSampler, pin.texcoord).r;
+	float3 albedo = albedoTexture.Sample(defaultSampler, input.texcoord).rgb;
+	float metalness = metalnessTexture.Sample(defaultSampler, input.texcoord).r;
+	float roughness = roughnessTexture.Sample(defaultSampler, input.texcoord).r;
 
 	// Outgoing light direction (vector from world-space fragment position to the "eye").
-	float3 Lo = normalize(eyePosition - pin.position);
+	float3 Lo = normalize(eyePosition - input.worldPosition);
 
 	// Get current fragment's normal and transform to world space.
-	float3 N = normalize(2.0 * normalTexture.Sample(defaultSampler, pin.texcoord).rgb - 1.0);
-	N = normalize(mul(pin.tangentBasis, N));
+    float3 normalMap = normalTexture.Sample(defaultSampler, input.texcoord).rgb;
+	float3 N = normalize(2.0 * normalTexture.Sample(defaultSampler, input.texcoord).rgb - 1.0);
+	N = normalize(mul(input.tangentBasis, N));
 	
 	// Angle between surface normal and outgoing light direction.
 	float cosLo = max(0.0, dot(N, Lo));

@@ -74,7 +74,7 @@ public sealed class Application : GraphicsObject
 
     public Size Size { get; private set; }
 
-    public Application(GraphicsBackend graphicsBackend, int width = 1024, int height = 800, int maxSamples = 16)
+    public Application(GraphicsBackend graphicsBackend, int width = 1024, int height = 800, TextureSampleCount maxSamples = TextureSampleCount.Count16)
     {
         SDL_GetVersion(out SDL_version version);
         //Log.Info($"SDL v{version.major}.{version.minor}.{version.patch}");
@@ -112,21 +112,21 @@ public sealed class Application : GraphicsObject
         _lights[2].Radiance = Vector3.One;
 
         TextureUsage colorTextureUsage = TextureUsage.RenderTarget;
-        if (_graphicsDevice.Samples <= 1)
+        if (_graphicsDevice.SampleCount == TextureSampleCount.Count1)
         {
             colorTextureUsage |= TextureUsage.ShaderRead;
         }
 
-        TextureDescription colorTextureDesc = TextureDescription.Texture2D(TextureFormat.Rgba16Float, width, height, 1, colorTextureUsage, _graphicsDevice.Samples);
-        TextureDescription depthStencilTextureDesc = TextureDescription.Texture2D(TextureFormat.Depth32FloatStencil8, width, height, 1, TextureUsage.RenderTarget, _graphicsDevice.Samples);
+        TextureDescription colorTextureDesc = TextureDescription.Texture2D(TextureFormat.Rgba16Float, width, height, 1, colorTextureUsage, _graphicsDevice.SampleCount);
+        TextureDescription depthStencilTextureDesc = TextureDescription.Texture2D(TextureFormat.Depth32FloatStencil8, width, height, 1, TextureUsage.RenderTarget, _graphicsDevice.SampleCount);
 
         _fboColorTexture = AddDisposable(_graphicsDevice.CreateTexture(colorTextureDesc));
         _fboDepthStencilTexture = AddDisposable(_graphicsDevice.CreateTexture(depthStencilTextureDesc));
 
-        if (_graphicsDevice.Samples > 1)
+        if (_graphicsDevice.SampleCount > TextureSampleCount.Count1)
         {
             TextureDescription resolveColorTextureDesc = TextureDescription.Texture2D(TextureFormat.Rgba16Float, width, height, 1,
-                TextureUsage.ShaderRead | TextureUsage.RenderTarget, 1);
+                TextureUsage.ShaderRead | TextureUsage.RenderTarget, TextureSampleCount.Count1);
             _fboResolveColorTexture = AddDisposable(_graphicsDevice.CreateTexture(resolveColorTextureDesc));
         }
         else
@@ -171,21 +171,28 @@ public sealed class Application : GraphicsObject
         _metalnessTexture = AddDisposable(CreateTexture(ImageFromFile("cerberus_M.png", 1), TextureFormat.R8Unorm));
         _roughnessTexture = AddDisposable(CreateTexture(ImageFromFile("cerberus_R.png", 1), TextureFormat.R8Unorm));
 
+        RasterizerState rasterizerState = new()
+        {
+            FrontFace = FrontFaceWinding.CounterClockwise
+        };
+
         RenderPipelineDescription pbrPipelineDesc = new()
         {
             VertexShader = CompileShader("pbr.hlsl", "vertexMain", "vs_5_0"),
             FragmentShader = CompileShader("pbr.hlsl", "fragmentMain", "ps_5_0"),
-            VertexDescriptor = new(new VertexLayoutDescriptor((uint)VertexMesh.SizeInBytes, VertexMesh.Attributes))
+            VertexDescriptor = new(new VertexLayoutDescriptor((uint)VertexMesh.SizeInBytes, VertexMesh.Attributes)),
+            RasterizerState = rasterizerState
         };
         _pbrPipeline = AddDisposable(_graphicsDevice.CreateRenderPipeline(pbrPipelineDesc));
 
         _skybox = AddDisposable(MeshFromFile("skybox.obj"));
         RenderPipelineDescription skyboxPipelineDesc = new()
         {
-            VertexShader = CompileShader("skybox.hlsl", "main_vs", "vs_5_0"),
-            FragmentShader = CompileShader("skybox.hlsl", "main_ps", "ps_5_0"),
+            VertexShader = CompileShader("skybox.hlsl", "vertexMain", "vs_5_0"),
+            FragmentShader = CompileShader("skybox.hlsl", "fragmentMain", "ps_5_0"),
             VertexDescriptor = new(new VertexLayoutDescriptor((uint)VertexMesh.SizeInBytes, new VertexAttributeDescriptor(VertexFormat.Float32x3, 0))),
-            DepthStencil = new DepthStencilDescriptor()
+            RasterizerState = rasterizerState,
+            DepthStencilState = new()
             {
                 DepthWriteEnabled = false,
                 DepthCompare = CompareFunction.Always
@@ -196,8 +203,9 @@ public sealed class Application : GraphicsObject
         RenderPipelineDescription tonemapPipelineDesc = new()
         {
             Label = "Tonemap",
-            VertexShader = CompileShader("tonemap.hlsl", "main_vs", "vs_5_0"),
-            FragmentShader = CompileShader("tonemap.hlsl", "main_ps", "ps_5_0")
+            VertexShader = CompileShader("tonemap.hlsl", "vertexMain", "vs_5_0"),
+            FragmentShader = CompileShader("tonemap.hlsl", "fragmentMain", "ps_5_0"),
+            RasterizerState = rasterizerState
         };
         _tonemapPipeline = AddDisposable(_graphicsDevice.CreateRenderPipeline(tonemapPipelineDesc));
 

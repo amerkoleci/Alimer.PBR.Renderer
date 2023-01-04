@@ -11,27 +11,26 @@ cbuffer TransformConstants : register(b0)
 	float4x4 sceneRotationMatrix;
 };
 
-struct PixelShaderInput
-{
-	float3 localPosition : POSITION;
-	float4 pixelPosition : SV_POSITION;
+struct VertexOutput {
+	float4 position : SV_POSITION;
+	float3 worldPosition : POSITION;
 };
 
 TextureCube envTexture : register(t0);
 SamplerState defaultSampler : register(s0);
 
 // Vertex shader
-PixelShaderInput main_vs(float3 position : ATTRIBUTE0)
+VertexOutput vertexMain(float3 position : ATTRIBUTE0)
 {
-	PixelShaderInput vout;
-	vout.localPosition = position;
-	vout.pixelPosition = mul(skyProjectionMatrix, float4(position, 1.0f));
-	return vout;
+    VertexOutput output;
+    output.position = mul(skyProjectionMatrix, float4(position, 1.0f));
+    output.worldPosition = position;
+	return output;
 }
 
-// Pixel shader
-float4 main_ps(PixelShaderInput pin) : SV_Target
+// Fragment shader
+float4 fragmentMain(in VertexOutput input) : SV_Target
 {
-	float3 envVector = normalize(pin.localPosition);
+	float3 envVector = normalize(input.worldPosition);
 	return envTexture.SampleLevel(defaultSampler, envVector, 0);
 }

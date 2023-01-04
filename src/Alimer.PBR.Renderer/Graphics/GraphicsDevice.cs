@@ -26,9 +26,9 @@ public abstract class GraphicsDevice : GraphicsObject
 
     public abstract CommandContext DefaultContext { get; }
     public abstract Texture ColorTexture { get; }
-    public abstract int Samples { get; }
+    public abstract TextureSampleCount SampleCount { get; }
 
-    public static GraphicsDevice CreateDefault(in SDL_Window window, int maxSamples = 4)
+    public static GraphicsDevice CreateDefault(in SDL_Window window, TextureSampleCount maxSamples = TextureSampleCount.Count4)
     {
         return new D3D11.D3D11GraphicsDevice(window, maxSamples);
     }

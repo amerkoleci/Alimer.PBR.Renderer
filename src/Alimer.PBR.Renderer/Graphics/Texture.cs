@@ -20,7 +20,15 @@ public abstract class Texture : GraphicsResource
         Height = description.Height;
         Depth = description.Dimension == TextureDimension.Texture3D ? description.DepthOrArrayLayers : 1;
         ArrayLayers = description.Dimension != TextureDimension.Texture3D ? description.DepthOrArrayLayers * arrayMultiplier : 1;
-        MipLevels = description.MipLevels;
+        if (description.Dimension == TextureDimension.Texture3D)
+        {
+            MipLevels = Utilities.CalculateMipLevels3D(description.Width, description.Height, description.DepthOrArrayLayers, description.MipLevels);
+        }
+        else
+        {
+            MipLevels = Utilities.CalculateMipLevels(description.Width, description.Height, description.MipLevels);
+        }
+
         Usage = description.Usage;
         SampleCount = description.SampleCount;
     }
@@ -58,7 +66,7 @@ public abstract class Texture : GraphicsResource
     /// <summary>
     /// Gets the texture total number of mipmap levels.
     /// </summary>
-    public int MipLevels { get; protected set; }
+    public int MipLevels { get; }
 
     /// <summary>
     /// Gets the texture <see cref="TextureUsage"/>.
@@ -68,7 +76,7 @@ public abstract class Texture : GraphicsResource
     /// <summary>
     /// Gets the texture sample count.
     /// </summary>
-    public int SampleCount { get; }
+    public TextureSampleCount SampleCount { get; }
 
     /// <summary>
     /// Get a mip-level width.

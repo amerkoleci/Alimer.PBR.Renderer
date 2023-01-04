@@ -175,7 +175,7 @@ public sealed class Mesh : GraphicsObject
 
             if (hasHasTexCoords0)
             {
-                texcoord = new Vector2(mesh->MTextureCoords[0][i].X, mesh->MTextureCoords[0][i].Y);
+                texcoord = new Vector2(mesh->MTextureCoords[0][i].X, 1.0f - mesh->MTextureCoords[0][i].Y);
             }
 
             vertices.Add(new VertexMesh(position, normal, tangent, bitangent, texcoord));

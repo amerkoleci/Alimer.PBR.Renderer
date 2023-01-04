@@ -68,9 +68,9 @@ internal sealed unsafe class D3D11Texture : Texture
 
         Texture2DDescription d3dDesc = new()
         {
-            Width = (uint)description.Width,
-            Height = (uint)description.Height,
-            MipLevels = (uint)description.MipLevels,
+            Width = (uint)Width,
+            Height = (uint)Height,
+            MipLevels = (uint)MipLevels,
             ArraySize = (uint)(description.DepthOrArrayLayers * arrayMultiplier),
             Format = DxgiFormat,
             SampleDesc = new SampleDescription((uint)description.SampleCount, 0),
@@ -98,12 +98,6 @@ internal sealed unsafe class D3D11Texture : Texture
         if (!string.IsNullOrEmpty(description.Label))
         {
             _handle->SetDebugName(description.Label);
-        }
-
-        if (d3dDesc.MipLevels == 0)
-        {
-            ((ID3D11Texture2D*)_handle)->GetDesc(&d3dDesc);
-            MipLevels = (int)d3dDesc.MipLevels;
         }
 
         if ((description.Usage & TextureUsage.ShaderRead) != 0)
@@ -182,7 +176,7 @@ internal sealed unsafe class D3D11Texture : Texture
                 switch (Dimension)
                 {
                     case TextureDimension.Texture2D:
-                        if (SampleCount > 1)
+                        if (SampleCount > TextureSampleCount.Count1)
                         {
                             if (ArrayLayers > 1)
                             {
@@ -252,7 +246,7 @@ internal sealed unsafe class D3D11Texture : Texture
                 switch (Dimension)
                 {
                     case TextureDimension.Texture2D:
-                        if (SampleCount > 1)
+                        if (SampleCount > TextureSampleCount.Count1)
                         {
                             if (ArrayLayers > 1)
                             {

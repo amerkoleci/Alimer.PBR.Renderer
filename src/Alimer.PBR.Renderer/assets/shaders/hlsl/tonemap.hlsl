@@ -7,8 +7,7 @@ static const float gamma     = 2.2;
 static const float exposure  = 1.0;
 static const float pureWhite = 1.0;
 
-struct PixelShaderInput
-{
+struct VertexOutput {
 	float4 position : SV_POSITION;
 	float2 texcoord : TEXCOORD;
 };
@@ -16,28 +15,29 @@ struct PixelShaderInput
 Texture2D sceneColor: register(t0);
 SamplerState defaultSampler : register(s0);
 
-PixelShaderInput main_vs(uint vertexID : SV_VertexID)
+VertexOutput vertexMain(uint vertexID : SV_VertexID)
 {
-	PixelShaderInput vout;
+    VertexOutput output;
 
 	if(vertexID == 0) {
-		vout.texcoord = float2(1.0, -1.0);
-		vout.position = float4(1.0, 3.0, 0.0, 1.0);
+        output.texcoord = float2(1.0f, -1.0f);
+        output.position = float4(1.0f, 3.0f, 0.0f, 1.0f);
 	}
 	else if(vertexID == 1) {
-		vout.texcoord = float2(-1.0, 1.0);
-		vout.position = float4(-3.0, -1.0, 0.0, 1.0);
+        output.texcoord = float2(-1.0f, 1.0f);
+        output.position = float4(-3.0f, -1.0, 0.0f, 1.0f);
 	}
 	else /* if(vertexID == 2) */ {
-		vout.texcoord = float2(1.0, 1.0);
-		vout.position = float4(1.0, -1.0, 0.0, 1.0);
+        output.texcoord = float2(1.0f, 1.0f);
+        output.position = float4(1.0f, -1.0f, 0.0f, 1.0f);
 	}
-	return vout;
+
+	return output;
 }
 
-float4 main_ps(PixelShaderInput pin) : SV_Target
+float4 fragmentMain(in VertexOutput input) : SV_Target
 {
-	float3 color = sceneColor.Sample(defaultSampler, pin.texcoord).rgb * exposure;
+	float3 color = sceneColor.Sample(defaultSampler, input.texcoord).rgb * exposure;
 	
 	// Reinhard tonemapping operator.
 	// see: "Photographic Tone Reproduction for Digital Images", eq. 4

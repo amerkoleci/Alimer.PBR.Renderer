@@ -5,11 +5,36 @@ using Win32.Graphics.Direct3D11;
 using Win32.Graphics.Dxgi.Common;
 using D3D11StencilOperation = Win32.Graphics.Direct3D11.StencilOperation;
 using D3DPrimitiveTopology = Win32.Graphics.Direct3D.PrimitiveTopology;
+using D3D11CullMode = Win32.Graphics.Direct3D11.CullMode;
+using D3D11FillMode = Win32.Graphics.Direct3D11.FillMode;
 
 namespace Alimer.Graphics.D3D11;
 
 internal static class D3D11Utils
 {
+    private static readonly D3D11FillMode[] s_FillModeMap = new D3D11FillMode[(int)(FillMode.Wireframe + 1)] {
+        D3D11FillMode.Solid,
+        D3D11FillMode.Wireframe
+    };
+
+    private static readonly D3D11CullMode[] s_cullModeMap = new D3D11CullMode[(int)(CullMode.None + 1)] {
+        D3D11CullMode.Back,
+        D3D11CullMode.Front,
+        D3D11CullMode.None,
+    };
+
+    
+    private static readonly D3D11StencilOperation[] s_stencilOperationMap = new D3D11StencilOperation[(int)StencilOperation.Count] {
+        D3D11StencilOperation.Keep,
+        D3D11StencilOperation.Zero,
+        D3D11StencilOperation.Replace,
+        D3D11StencilOperation.IncrementSaturate,
+        D3D11StencilOperation.DecrementSaturate,
+        D3D11StencilOperation.Invert,
+        D3D11StencilOperation.Increment,
+        D3D11StencilOperation.Decrement,
+    };
+
     public static Format ToDxgiFormat(this TextureFormat format)
     {
         switch (format)
@@ -152,6 +177,9 @@ internal static class D3D11Utils
         }
     }
 
+    public static D3D11FillMode ToD3D11(this FillMode value) => s_FillModeMap[(uint)value];
+    public static D3D11CullMode ToD3D11(this CullMode value) => s_cullModeMap[(uint)value];
+
     public static D3DPrimitiveTopology ToD3D11(this PrimitiveTopology value)
     {
         switch (value)
@@ -222,26 +250,15 @@ internal static class D3D11Utils
         }
     }
 
-    private static readonly D3D11StencilOperation[] s_stencilOperationMap = new D3D11StencilOperation[(int)StencilOperation.Count] {
-        D3D11StencilOperation.Keep,
-        D3D11StencilOperation.Zero,
-        D3D11StencilOperation.Replace,
-        D3D11StencilOperation.IncrementSaturate,
-        D3D11StencilOperation.DecrementSaturate,
-        D3D11StencilOperation.Invert,
-        D3D11StencilOperation.Increment,
-        D3D11StencilOperation.Decrement,
-    };
-
     public static D3D11StencilOperation ToD3D11(this StencilOperation operation) => s_stencilOperationMap[(uint)operation];
 
-    public static DepthStencilOperationDescription ToD3D11(this StencilDescriptor state)
+    public static DepthStencilOperationDescription ToD3D11(this StencilFaceState state)
     {
         return new DepthStencilOperationDescription(
-            state.StencilFailureOperation.ToD3D11(),
-            state.DepthFailureOperation.ToD3D11(),
-            state.DepthStencilPassOperation.ToD3D11(),
-            state.StencilCompareFunction.ToD3D11()
+            state.FailOperation.ToD3D11(),
+            state.DepthFailOperation.ToD3D11(),
+            state.PassOperation.ToD3D11(),
+            state.CompareFunction.ToD3D11()
             );
     }
 }
