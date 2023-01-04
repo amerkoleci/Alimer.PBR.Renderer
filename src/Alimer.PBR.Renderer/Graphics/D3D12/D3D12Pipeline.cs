@@ -6,9 +6,9 @@ using Win32.Graphics.Direct3D11;
 using static Win32.Apis;
 using D3DPrimitiveTopology = Win32.Graphics.Direct3D.PrimitiveTopology;
 
-namespace Alimer.Graphics.D3D11;
+namespace Alimer.Graphics.D3D12;
 
-internal sealed unsafe class D3D11Pipeline : Pipeline
+internal sealed unsafe class D3D12Pipeline : Pipeline
 {
     private readonly ComPtr<ID3D11VertexShader> _vs = default;
     private readonly ComPtr<ID3D11PixelShader> _ps = default;
@@ -22,7 +22,7 @@ internal sealed unsafe class D3D11Pipeline : Pipeline
 
     private readonly ComPtr<ID3D11ComputeShader> _cs = default;
 
-    public D3D11Pipeline(D3D11GraphicsDevice device, in ComputePipelineDescription description)
+    public D3D12Pipeline(D3D12GraphicsDevice device, in ComputePipelineDescription description)
         : base(device, description)
     {
         if (device.NativeDevice->CreateComputeShader(description.ComputeShader.Span, null, _cs.GetAddressOf()).Failure)
@@ -31,7 +31,7 @@ internal sealed unsafe class D3D11Pipeline : Pipeline
         }
     }
 
-    public D3D11Pipeline(D3D11GraphicsDevice device, in RenderPipelineDescription description)
+    public D3D12Pipeline(D3D12GraphicsDevice device, in RenderPipelineDescription description)
         : base(device, description)
     {
         if (device.NativeDevice->CreateVertexShader(description.VertexShader.Span, null, _vs.GetAddressOf()).Failure)

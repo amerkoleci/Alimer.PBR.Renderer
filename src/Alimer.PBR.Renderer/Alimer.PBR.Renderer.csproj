@@ -15,7 +15,7 @@
     <PackageReference Include="Alimer.Bindings.SDL" />
     <PackageReference Include="Vortice.Win32.Graphics.Dxgi" />
     <PackageReference Include="Vortice.Win32.Graphics.Direct3D11" />
-    <!--<PackageReference Include="Vortice.Win32.Graphics.Direct3D12" />-->
+    <PackageReference Include="Vortice.Win32.Graphics.Direct3D12" />
     <PackageReference Include="Vortice.Win32.Graphics.Direct3D.Fxc" />
     <!--<PackageReference Include="Vortice.Vulkan" />-->
 

@@ -11,15 +11,22 @@ namespace Alimer.PBR.Renderer;
 public sealed class Mesh : GraphicsObject
 {
     private static readonly Assimp _assImp;
-    private static readonly PostProcessSteps s_postProcessSteps = PostProcessSteps.CalculateTangentSpace
+    private static readonly PostProcessSteps s_postProcessSteps =
+        PostProcessSteps.FindDegenerates
+        | PostProcessSteps.FindInvalidData
+        //| PostProcessSteps.FlipUVs               // Required for Direct3D
+        | PostProcessSteps.FlipWindingOrder      
+        | PostProcessSteps.JoinIdenticalVertices 
+        | PostProcessSteps.ImproveCacheLocality 
+        | PostProcessSteps.OptimizeMeshes 
         | PostProcessSteps.Triangulate
-        | PostProcessSteps.SortByPrimitiveType
         | PostProcessSteps.PreTransformVertices
-        | PostProcessSteps.GenerateNormals
-        | PostProcessSteps.GenerateUVCoords
-        | PostProcessSteps.OptimizeMeshes
-        | PostProcessSteps.Debone
-        | PostProcessSteps.ValidateDataStructure;
+        | PostProcessSteps.GenerateNormals 
+        | PostProcessSteps.CalculateTangentSpace
+        // | PostProcessSteps.GenerateUVCoords
+        // | PostProcessSteps.SortByPrimitiveType
+        // | PostProcessSteps.Debone
+        ;
 
     static Mesh()
     {
@@ -181,9 +188,9 @@ public sealed class Mesh : GraphicsObject
         for (int i = 0; i < (int)mesh->MNumFaces; ++i)
         {
             Guard.IsTrue(mesh->MFaces[i].MNumIndices == 3);
-            indices.Add((uint)mesh->MFaces[i].MIndices[0]);
-            indices.Add((uint)mesh->MFaces[i].MIndices[1]);
-            indices.Add((uint)mesh->MFaces[i].MIndices[2]);
+            indices.Add(mesh->MFaces[i].MIndices[0]);
+            indices.Add(mesh->MFaces[i].MIndices[1]);
+            indices.Add(mesh->MFaces[i].MIndices[2]);
         }
 
         return new(graphicsDevice, vertices, indices.ToArray());

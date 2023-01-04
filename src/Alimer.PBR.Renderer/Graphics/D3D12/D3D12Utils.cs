@@ -8,9 +8,9 @@ using D3D11FillMode = Win32.Graphics.Direct3D11.FillMode;
 using D3D11BlendOperation = Win32.Graphics.Direct3D11.BlendOperation;
 using System.Diagnostics;
 
-namespace Alimer.Graphics.D3D11;
+namespace Alimer.Graphics.D3D12;
 
-internal static class D3D11Utils
+internal static class D3D12Utils
 {
     private static readonly D3D11FillMode[] s_FillModeMap = new D3D11FillMode[(int)(FillMode.Wireframe + 1)] {
         D3D11FillMode.Solid,

@@ -171,17 +171,11 @@ public sealed class Application : GraphicsObject
         _metalnessTexture = AddDisposable(CreateTexture(ImageFromFile("cerberus_M.png", 1), TextureFormat.R8Unorm));
         _roughnessTexture = AddDisposable(CreateTexture(ImageFromFile("cerberus_R.png", 1), TextureFormat.R8Unorm));
 
-        RasterizerState rasterizerState = new()
-        {
-            FrontFace = FrontFaceWinding.CounterClockwise
-        };
-
         RenderPipelineDescription pbrPipelineDesc = new()
         {
             VertexShader = CompileShader("pbr.hlsl", "vertexMain", "vs_5_0"),
             FragmentShader = CompileShader("pbr.hlsl", "fragmentMain", "ps_5_0"),
-            VertexDescriptor = new(new VertexLayoutDescriptor((uint)VertexMesh.SizeInBytes, VertexMesh.Attributes)),
-            RasterizerState = rasterizerState
+            VertexDescriptor = new(new VertexLayoutDescriptor((uint)VertexMesh.SizeInBytes, VertexMesh.Attributes))
         };
         _pbrPipeline = AddDisposable(_graphicsDevice.CreateRenderPipeline(pbrPipelineDesc));
 
@@ -191,7 +185,6 @@ public sealed class Application : GraphicsObject
             VertexShader = CompileShader("skybox.hlsl", "vertexMain", "vs_5_0"),
             FragmentShader = CompileShader("skybox.hlsl", "fragmentMain", "ps_5_0"),
             VertexDescriptor = new(new VertexLayoutDescriptor((uint)VertexMesh.SizeInBytes, new VertexAttributeDescriptor(VertexFormat.Float32x3, 0))),
-            RasterizerState = rasterizerState,
             DepthStencilState = DepthStencilState.DepthNone
         };
         _skyboxPipeline = AddDisposable(_graphicsDevice.CreateRenderPipeline(skyboxPipelineDesc));
