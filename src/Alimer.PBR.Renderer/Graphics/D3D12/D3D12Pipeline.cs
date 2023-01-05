@@ -176,8 +176,9 @@ internal sealed unsafe class D3D12Pipeline : Pipeline
 
         if (disposing)
         {
-           // _rootSignature.Dispose();
-            _handle.Dispose();
+            //((D3D12GraphicsDevice)Device).DeferDestroy((IUnknown*)_handle.Get());
+            // _rootSignature.Dispose();
+            //_handle.Dispose();
         }
     }
 

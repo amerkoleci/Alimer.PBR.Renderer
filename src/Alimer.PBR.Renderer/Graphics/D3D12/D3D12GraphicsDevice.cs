@@ -3,6 +3,7 @@
 
 using System.Drawing;
 using Alimer.Bindings.SDL;
+using CommunityToolkit.Diagnostics;
 using Win32;
 using Win32.Graphics.Direct3D;
 using Win32.Graphics.Direct3D12;
@@ -16,8 +17,6 @@ using static Win32.Graphics.Dxgi.Apis;
 using Feature = Win32.Graphics.Direct3D12.Feature;
 using InfoQueueFilter = Win32.Graphics.Direct3D12.InfoQueueFilter;
 using MessageId = Win32.Graphics.Direct3D12.MessageId;
-using D3D12SamplerDescription = Win32.Graphics.Direct3D12.SamplerDescription;
-using CommunityToolkit.Diagnostics;
 
 namespace Alimer.Graphics.D3D12;
 
@@ -32,20 +31,32 @@ public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
     private readonly ComPtr<ID3D12Fence> _frameFence;
     private readonly ulong[] _fenceValues = new ulong[NumFramesInFlight];
     private uint _frameIndex;
+    private ulong _frameCount;
 
-    private readonly RootSignatureVersion _rootSignatureVersion = RootSignatureVersion.V1_0;
     private readonly FeatureLevel _featureLevel = FeatureLevel.Level_11_0;
+    private readonly RootSignatureVersion _rootSignatureVersion = RootSignatureVersion.V1_0;
 
     private readonly ComPtr<ID3D12RootSignature> _computeRootSignature;
 
     private readonly ComPtr<IDXGISwapChain3> _swapChain;
     private readonly D3D12Texture[] _colorTextures = new D3D12Texture[NumFramesInFlight];
 
+    private readonly D3D12DescriptorAllocator _resourceAllocator;
+    private readonly D3D12DescriptorAllocator _samplerAllocator;
+    private readonly D3D12DescriptorAllocator _rtvAllocator;
+    private readonly D3D12DescriptorAllocator _dsvAllocator;
+
+    private readonly object _destroyLock = new();
+    private readonly Queue<Tuple<ComPtr<IUnknown>, ulong>> _deferredReleases = new();
+    private bool _shuttingDown;
+
     public Size Size { get; private set; }
     public TextureFormat ColorFormat { get; } = TextureFormat.Bgra8Unorm;
     public ID3D12Device* NativeDevice => _device;
     public ID3D12CommandQueue* GraphicsQueue => _graphicsQueue;
     public ID3D12RootSignature* ComputeRootSignature => _computeRootSignature;
+
+    public uint FrameIndex => _frameIndex;
 
     public override CommandContext DefaultContext { get; }
 
@@ -151,6 +162,15 @@ public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
             d3dInfoQueue.Get()->SetBreakOnSeverity(MessageSeverity.Corruption, true);
             d3dInfoQueue.Get()->SetBreakOnSeverity(MessageSeverity.Error, true);
 
+            MessageSeverity* enabledSeverities = stackalloc MessageSeverity[5];
+
+            // These severities should be seen all the time
+            uint enabledSeveritiesCount = 0;
+            enabledSeverities[enabledSeveritiesCount++] = MessageSeverity.Corruption;
+            enabledSeverities[enabledSeveritiesCount++] = MessageSeverity.Error;
+            enabledSeverities[enabledSeveritiesCount++] = MessageSeverity.Warning;
+            enabledSeverities[enabledSeveritiesCount++] = MessageSeverity.Message;
+
             uint disabledMessagesCount = 0;
             MessageId* disabledMessages = stackalloc MessageId[16];
             disabledMessages[disabledMessagesCount++] = MessageId.ClearRenderTargetViewMismatchingClearValue;
@@ -162,6 +182,8 @@ public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
             disabledMessages[disabledMessagesCount++] = MessageId.ExecuteCommandListsGpuWrittenReadbackResourceMapped;
 
             InfoQueueFilter filter = new();
+            filter.AllowList.NumSeverities = enabledSeveritiesCount;
+            filter.AllowList.pSeverityList = enabledSeverities;
             filter.DenyList.NumIDs = disabledMessagesCount;
             filter.DenyList.pIDList = disabledMessages;
 
@@ -213,20 +235,28 @@ public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
         DefaultContext = new D3D12CommandContext(this, CommandListType.Direct);
         SampleCount = (TextureSampleCount)samples;
 
-        FeatureDataRootSignature featureDataRootSignature = new()
-        {
-            HighestVersion = RootSignatureVersion.V1_1,
-        };
+        // Create CPU descriptor allocators
+        _resourceAllocator = new D3D12DescriptorAllocator(NativeDevice, DescriptorHeapType.CbvSrvUav, 4096);
+        _samplerAllocator = new D3D12DescriptorAllocator(NativeDevice, DescriptorHeapType.Sampler, 256);
+        _rtvAllocator = new D3D12DescriptorAllocator(NativeDevice, DescriptorHeapType.Rtv, 512);
+        _dsvAllocator = new D3D12DescriptorAllocator(NativeDevice, DescriptorHeapType.Dsv, 256);
 
-        if (_device.Get()->CheckFeatureSupport(Feature.RootSignature, &featureDataRootSignature, sizeof(FeatureDataRootSignature)).Failure)
+        // Init caps
         {
-            featureDataRootSignature.HighestVersion = RootSignatureVersion.V1_0;
+            ReadOnlySpan<FeatureLevel> featureLevels = stackalloc FeatureLevel[4]
+            {
+                FeatureLevel.Level_12_2,
+                FeatureLevel.Level_12_1,
+                FeatureLevel.Level_11_1,
+                FeatureLevel.Level_11_0
+            };
+            _featureLevel = _device.Get()->CheckMaxSupportedFeatureLevel(featureLevels);
+            _rootSignatureVersion = _device.Get()->CheckHighestRootSignatureVersionl();
         }
-        _rootSignatureVersion = featureDataRootSignature.HighestVersion;
 
         // Create universal compute root signature.
         {
-            StaticSamplerDescription computeSamplerDesc = new(D3D12SamplerDescription.LinearWrap, ShaderVisibility.All, 0, 0);
+            StaticSamplerDescription computeSamplerDesc = new(0, Filter.MinMagMipLinear);
 
             DescriptorRange1* descriptorRanges = stackalloc DescriptorRange1[2];
             descriptorRanges[0] = new DescriptorRange1(DescriptorRangeType.Srv, 1, 0, 0, DescriptorRangeFlags.DataStatic);
@@ -290,11 +320,23 @@ public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
 
     protected override void Dispose(bool disposing)
     {
-        base.Dispose(disposing);
-
         if (disposing)
         {
             WaitForGPU();
+
+            _shuttingDown = true;
+            base.Dispose(disposing);
+
+            _frameCount = ulong.MaxValue;
+            ProcessDeletionQueue();
+            _frameCount = 0;
+
+
+            _resourceAllocator.Shutdown();
+            _samplerAllocator.Shutdown();
+            _rtvAllocator.Shutdown();
+            _dsvAllocator.Shutdown();
+            _frameFence.Dispose();
 
             _computeRootSignature.Dispose();
 
@@ -305,7 +347,6 @@ public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
             _swapChain.Dispose();
             DefaultContext.Dispose();
 
-            _frameFence.Dispose();
             _graphicsQueue.Dispose();
             _device.Dispose();
 
@@ -318,6 +359,112 @@ public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
                 dxgiDebug.Get()->ReportLiveObjects(DXGI_DEBUG_ALL, ReportLiveObjectFlags.Summary | ReportLiveObjectFlags.IgnoreInternal);
             }
 #endif
+        }
+        else
+        {
+            base.Dispose(false);
+        }
+    }
+
+    public void DeferDestroy(IUnknown* resource)
+    {
+        if (resource == null)
+        {
+            return;
+        }
+
+        if (_shuttingDown)
+        {
+            resource->Release();
+            //SafeRelease(allocation);
+            return;
+        }
+
+        lock (_destroyLock)
+        {
+            _deferredReleases.Enqueue(Tuple.Create(new ComPtr<IUnknown>(resource), _frameCount));
+            //if (allocation != nullptr)
+            //{
+            //    deferredAllocations.push_back(std::make_pair(allocation, frameCount));
+            //}
+        }
+    }
+
+    public void ProcessDeletionQueue()
+    {
+        lock (_destroyLock)
+        {
+            while (_deferredReleases.Count > 0)
+            {
+                var pair = _deferredReleases.Peek();
+                if (pair.Item2 + (ulong)NumFramesInFlight < _frameCount)
+                {
+                    pair = _deferredReleases.Dequeue();
+                    //pair.Item1.Dispose();
+                }
+                else
+                {
+                    break;
+                }
+            }
+        }
+    }
+
+    public CpuDescriptorHandle AllocateDescriptor(DescriptorHeapType type)
+    {
+        switch (type)
+        {
+            case DescriptorHeapType.CbvSrvUav:
+                return _resourceAllocator.Allocate();
+            case DescriptorHeapType.Sampler:
+                return _samplerAllocator.Allocate();
+            case DescriptorHeapType.Rtv:
+                return _rtvAllocator.Allocate();
+            case DescriptorHeapType.Dsv:
+                return _dsvAllocator.Allocate();
+            default:
+                throw new Exception();
+        }
+    }
+
+    public void FreeDescriptor(DescriptorHeapType type, in CpuDescriptorHandle handle)
+    {
+        if (handle.ptr == 0)
+            return;
+
+        switch (type)
+        {
+            case DescriptorHeapType.CbvSrvUav:
+                _resourceAllocator.Free(handle);
+                break;
+            case DescriptorHeapType.Sampler:
+                _samplerAllocator.Free(handle);
+                break;
+            case DescriptorHeapType.Rtv:
+                _rtvAllocator.Free(handle);
+                break;
+            case DescriptorHeapType.Dsv:
+                _dsvAllocator.Free(handle);
+                break;
+            default:
+                break;
+        }
+    }
+
+    public uint GetDescriptorSize(DescriptorHeapType type)
+    {
+        switch (type)
+        {
+            //case DescriptorHeapType.CbvSrvUav:
+            //    return _resourceAllocator.DescriptorSize;
+            //case DescriptorHeapType.Sampler:
+            //    return _samplerAllocator.DescriptorSize;
+            case DescriptorHeapType.Rtv:
+                return _rtvAllocator.DescriptorSize;
+            case DescriptorHeapType.Dsv:
+                return _dsvAllocator.DescriptorSize;
+            default:
+                return 0;
         }
     }
 
@@ -359,7 +506,6 @@ public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
         return rootSignature.Move();
     }
 
-
     private void AfterResize()
     {
         if (_colorTextures[0] is not null)
@@ -375,11 +521,14 @@ public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
 
         for (uint i = 0; i < swapChainDesc.BufferCount; i++)
         {
-            ID3D12Resource* d3dHandle = default;
+            using ComPtr<ID3D12Resource> d3dHandle = default;
             ThrowIfFailed(
-                _swapChain.Get()->GetBuffer(i, __uuidof<ID3D12Resource>(), (void**)&d3dHandle)
+                _swapChain.Get()->GetBuffer(i, __uuidof<ID3D12Resource>(), d3dHandle.GetVoidAddressOf())
                 );
-            _colorTextures[i] = new D3D12Texture(this, colorTextureDesc, d3dHandle);
+            _colorTextures[i] = new D3D12Texture(this, colorTextureDesc, d3dHandle)
+            {
+                IsSwapChain = true
+            };
         }
     }
 
@@ -404,23 +553,9 @@ public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
         }
 
         currentFrameFenceValue = prevFrameFenceValue + 1;
-    }
+        _frameCount++;
 
-    public void ExecuteCommandList(bool reset = true)
-    {
-        //ThrowIfFailed()
-        //if (FAILED(m_commandList->Close()))
-        //{
-        //    throw std::runtime_error("Failed close command list (validation error or not in recording state)");
-        //}
-        //
-        //ID3D12CommandList* lists[] = { m_commandList.Get() };
-        //m_commandQueue->ExecuteCommandLists(1, lists);
-        //
-        //if (reset)
-        //{
-        //    m_commandList->Reset(m_commandAllocators[m_frameIndex].Get(), nullptr);
-        //}
+        ProcessDeletionQueue();
     }
 
     public void WaitForGPU()
@@ -430,6 +565,7 @@ public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
 
         _graphicsQueue.Get()->Signal(_frameFence.Get(), fenceValue);
         _frameFence.Get()->SetEventOnCompletion(fenceValue, Win32.Handle.Null);
+        ProcessDeletionQueue();
     }
 
     protected override GraphicsBuffer CreateBufferCore(in BufferDescription description, void* initialData)

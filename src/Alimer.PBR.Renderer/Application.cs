@@ -220,8 +220,8 @@ public sealed class Application : GraphicsObject
             context.SetPipeline(equirectToCubePipeline);
             context.Dispatch(envTextureUnfiltered.Width / 32, envTextureUnfiltered.Height / 32, 6);
         }
-
         context.GenerateMips(envTextureUnfiltered);
+        context.Flush(true);
 
         // Compute pre-filtered specular environment map.
         {
@@ -456,7 +456,6 @@ public sealed class Application : GraphicsObject
             _shadingCB.SetData(context, shadingConstants);
         }
 
-
         context.SetConstantBuffer(0, _transformCB.Buffer);
         context.SetConstantBuffer(1, _shadingCB.Buffer);
         context.SetConstantBuffer(PerViewData.Slot, _perViewData.Buffer);
@@ -514,6 +513,7 @@ public sealed class Application : GraphicsObject
             context.Draw(3);
         }
 
+        context.Flush();
         _graphicsDevice.EndFrame();
     }
 

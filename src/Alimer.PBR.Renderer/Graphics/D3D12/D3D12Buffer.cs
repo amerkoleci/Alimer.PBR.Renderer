@@ -9,7 +9,7 @@ using static Win32.Graphics.Direct3D12.Apis;
 
 namespace Alimer.Graphics.D3D12;
 
-internal sealed unsafe class D3D12Buffer : GraphicsBuffer
+internal sealed unsafe class D3D12Buffer : GraphicsBuffer, ID3D11GpuResource
 {
     private readonly ComPtr<ID3D12Resource> _handle;
 
@@ -36,6 +36,7 @@ internal sealed unsafe class D3D12Buffer : GraphicsBuffer
             resourceFlags |= ResourceFlags.DenyShaderResource;
         }
 
+        State = ResourceStates.Common;
         ResourceDescription desc = ResourceDescription.Buffer(size, resourceFlags);
 
         //SubresourceData* pInitialData = default;
@@ -50,7 +51,7 @@ internal sealed unsafe class D3D12Buffer : GraphicsBuffer
            &heapProps,
            HeapFlags.None,
            &desc,
-           ResourceStates.Common,
+           State,
            null,
            __uuidof<ID3D12Resource>(),
            _handle.GetVoidAddressOf()
@@ -66,7 +67,10 @@ internal sealed unsafe class D3D12Buffer : GraphicsBuffer
         }
     }
 
-    public ID3D12Resource* Handle => _handle.Get();
+    public ID3D12Resource* Handle => _handle;
+    public ResourceStates State { get; set; }
+    public ResourceStates TransitioningState { get; set; } = (ResourceStates)uint.MaxValue;
+
     public bool IsDynamic { get; }
 
     protected override void Dispose(bool disposing)
@@ -75,6 +79,7 @@ internal sealed unsafe class D3D12Buffer : GraphicsBuffer
 
         if (disposing)
         {
+            ((D3D12GraphicsDevice)Device).DeferDestroy((IUnknown*)_handle.Get());
             _handle.Dispose();
         }
     }

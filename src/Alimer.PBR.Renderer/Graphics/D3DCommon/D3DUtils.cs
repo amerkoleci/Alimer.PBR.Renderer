@@ -1,6 +1,7 @@
 ﻿// Copyright © Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
+using Win32;
 using Win32.Graphics.Dxgi.Common;
 using D3DPrimitiveTopology = Win32.Graphics.Direct3D.PrimitiveTopology;
 
@@ -163,5 +164,11 @@ internal static class D3DUtils
             default:
                 return D3DPrimitiveTopology.PointList;
         }
+    }
+
+    public static unsafe uint GetRefCount(IUnknown* @interface)
+    {
+        @interface->AddRef();
+        return @interface->Release();
     }
 }

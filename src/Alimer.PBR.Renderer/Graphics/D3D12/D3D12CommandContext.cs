@@ -1,29 +1,38 @@
 ﻿// Copyright © Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
+using System.Drawing;
+using CommunityToolkit.Diagnostics;
 using Vortice.Mathematics;
+using Win32;
 using Win32.Graphics.Direct3D12;
-using D3DPrimitiveTopology = Win32.Graphics.Direct3D.PrimitiveTopology;
 using static Win32.Apis;
 using static Win32.Graphics.Direct3D12.Apis;
-using System.Runtime.CompilerServices;
-using CommunityToolkit.Diagnostics;
-using Win32;
-using System.Drawing;
+using D3DPrimitiveTopology = Win32.Graphics.Direct3D.PrimitiveTopology;
 
 namespace Alimer.Graphics.D3D12;
 
 internal sealed unsafe class D3D12CommandContext : CommandContext
 {
+    private static readonly ResourceStates s_ValidComputeResourceStates =
+        ResourceStates.UnorderedAccess
+        | ResourceStates.NonPixelShaderResource
+        | ResourceStates.CopyDest
+        | ResourceStates.CopySource;
+
     private readonly D3D12GraphicsDevice _device;
+    private readonly CommandListType _type;
     private readonly ComPtr<ID3D12CommandAllocator>[] _commandAllocators = new ComPtr<ID3D12CommandAllocator>[GraphicsDevice.NumFramesInFlight];
     private readonly ComPtr<ID3D12GraphicsCommandList> _commandList;
+
+    private readonly ResourceBarrier[] _resourceBarriers = new ResourceBarrier[16];
+    private uint _numBarriersToFlush;
 
     private D3D12Pipeline? _currentPipeline;
     private D3DPrimitiveTopology _currentPrimitiveTopology;
 
     private RenderPassDescriptor _currentRenderPass;
-    //private readonly ID3D11RenderTargetView*[] _rtvs = new ID3D11RenderTargetView*[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT];
+    private readonly CpuDescriptorHandle[] _rtvs = new CpuDescriptorHandle[D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT];
     //private ID3D11DepthStencilView* DSV = null;
     //private readonly ID3D11Buffer*[] _vertexBindings = new ID3D11Buffer*[8];
     //private uint[] _vertexOffsets = new uint[8];
@@ -31,6 +40,7 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
     public D3D12CommandContext(D3D12GraphicsDevice device, CommandListType type)
     {
         _device = device;
+        _type = type;
 
         for (int i = 0; i < GraphicsDevice.NumFramesInFlight; i++)
         {
@@ -65,32 +75,126 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
         }
     }
 
+    public void TransitionResource(ID3D11GpuResource resource, ResourceStates newState, bool flushImmediate = false)
+    {
+        ResourceStates oldState = resource.State;
+
+        if (_type == CommandListType.Compute)
+        {
+            Guard.IsTrue((oldState & s_ValidComputeResourceStates) == oldState);
+            Guard.IsTrue((newState & s_ValidComputeResourceStates) == newState);
+        }
+
+        if (oldState != newState)
+        {
+            Guard.IsTrue(_numBarriersToFlush < _resourceBarriers.Length, "Exceeded arbitrary limit on buffered barriers");
+            ref ResourceBarrier barrierDesc = ref _resourceBarriers[_numBarriersToFlush++];
+
+            barrierDesc.Type = ResourceBarrierType.Transition;
+            barrierDesc.Transition.pResource = resource.Handle;
+            barrierDesc.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+            barrierDesc.Transition.StateBefore = oldState;
+            barrierDesc.Transition.StateAfter = newState;
+
+            // Check to see if we already started the transition
+            if (newState == resource.TransitioningState)
+            {
+                barrierDesc.Flags = ResourceBarrierFlags.EndOnly;
+                resource.TransitioningState = (ResourceStates)uint.MaxValue;
+            }
+            else
+            {
+                barrierDesc.Flags = ResourceBarrierFlags.None;
+            }
+
+            resource.State = newState;
+        }
+        else if (newState == ResourceStates.UnorderedAccess)
+        {
+            InsertUAVBarrier(resource, flushImmediate);
+        }
+
+        if (flushImmediate || _numBarriersToFlush == _resourceBarriers.Length)
+        {
+            FlushResourceBarriers();
+        }
+    }
+
+    public void InsertUAVBarrier(ID3D11GpuResource resource, bool flushImmediate = false)
+    {
+        Guard.IsTrue(_numBarriersToFlush < _resourceBarriers.Length, "Exceeded arbitrary limit on buffered barriers");
+        ref ResourceBarrier barrierDesc = ref _resourceBarriers[_numBarriersToFlush++];
+
+        barrierDesc.Type = ResourceBarrierType.Uav;
+        barrierDesc.Flags = ResourceBarrierFlags.None;
+        barrierDesc.UAV.pResource = resource.Handle;
+
+        if (flushImmediate)
+            FlushResourceBarriers();
+    }
+
+    public void FlushResourceBarriers()
+    {
+        if (_numBarriersToFlush > 0)
+        {
+            fixed (ResourceBarrier* pBarriers = _resourceBarriers)
+            {
+                _commandList.Get()->ResourceBarrier(_numBarriersToFlush, pBarriers);
+            }
+
+            _numBarriersToFlush = 0;
+        }
+    }
+
+    public void Reset()
+    {
+        _commandList.Get()->Reset(_commandAllocators[_device.FrameIndex].Get(), null);
+
+        _numBarriersToFlush = 0;
+    }
+
+    public override void Flush(bool waitForCompletion = false)
+    {
+        ThrowIfFailed(_commandList.Get()->Close());
+
+        ID3D12GraphicsCommandList* d3d12CommandList = _commandList.Get();
+        _device.GraphicsQueue->ExecuteCommandLists(1u, (ID3D12CommandList**)&d3d12CommandList);
+
+        if (waitForCompletion)
+        {
+            _device.WaitForGPU();
+        }
+
+        Reset();
+    }
+
     public override void PushDebugGroup(string groupLabel)
     {
-        fixed (char* groupLabelPtr = groupLabel)
-        {
-            //_annotation.Get()->BeginEvent((ushort*)groupLabelPtr);
-        }
+        // TODO: Use Pix3 (WinPixEventRuntime)
+
+        int bufferSize = PixHelpers.CalculateNoArgsEventSize(groupLabel);
+        void* buffer = stackalloc byte[bufferSize];
+        PixHelpers.FormatNoArgsEventToBuffer(buffer, PixHelpers.PixEventType.PIXEvent_BeginEvent_NoArgs, 0, groupLabel);
+        _commandList.Get()->BeginEvent(PixHelpers.WinPIXEventPIX3BlobVersion, buffer, (uint)bufferSize);
     }
 
     public override void PopDebugGroup()
     {
-        //_annotation.Get()->EndEvent();
+        _commandList.Get()->EndEvent();
     }
 
     public override void InsertDebugMarker(string debugLabel)
     {
-        fixed (char* debugLabelPtr = debugLabel)
-        {
-            //_annotation.Get()->SetMarker((ushort*)debugLabelPtr);
-        }
+        int bufferSize = PixHelpers.CalculateNoArgsEventSize(debugLabel);
+        void* buffer = stackalloc byte[bufferSize];
+        PixHelpers.FormatNoArgsEventToBuffer(buffer, PixHelpers.PixEventType.PIXEvent_SetMarker_NoArgs, 0, debugLabel);
+        _commandList.Get()->SetMarker(PixHelpers.WinPIXEventPIX3BlobVersion, buffer, (uint)bufferSize);
     }
 
     protected override void BeginRenderPassCore(in RenderPassDescriptor renderPass)
     {
-#if TODO
         uint numRTVs = 0;
-        DSV = default;
+        //DSV = default;
         Size renderArea = new(int.MaxValue, int.MaxValue);
 
         if (!string.IsNullOrEmpty(renderPass.Label))
@@ -112,7 +216,8 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
                 renderArea.Width = Math.Min(renderArea.Width, texture.GetWidth(mipLevel));
                 renderArea.Height = Math.Min(renderArea.Height, texture.GetHeight(mipLevel));
 
-                //_rtvs[numRTVs] = texture.GetRTV(mipLevel, slice);
+                _rtvs[numRTVs] = texture.GetRTV(mipLevel, slice);
+                TransitionResource(texture, ResourceStates.RenderTarget, true);
 
                 switch (attachment.LoadAction)
                 {
@@ -121,10 +226,10 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
 
                     case LoadAction.Clear:
                         Color4 clearColorValue = attachment.ClearColor;
-                        _context->ClearRenderTargetView(_rtvs[numRTVs], (float*)&clearColorValue);
+                        _commandList.Get()->ClearRenderTargetView(_rtvs[numRTVs], (float*)&clearColorValue, NumRects: 0, pRects: null);
                         break;
                     case LoadAction.DontCare:
-                        _context->DiscardView((ID3D11View*)_rtvs[numRTVs]);
+                        //_commandList.Get()->DiscardResource((ID3D11View*)_rtvs[numRTVs]);
                         break;
                 }
 
@@ -132,6 +237,7 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
             }
         }
 
+#if TODO
         if (renderPass.DepthStencilAttachment.HasValue)
         {
             RenderPassDepthStencilAttachment attachment = renderPass.DepthStencilAttachment.Value;
@@ -181,25 +287,23 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
                 _context->ClearDepthStencilView(DSV, clearFlags, attachment.ClearDepth, (byte)attachment.ClearStencil);
             }
         }
+#endif
 
-        fixed (ID3D11RenderTargetView** RTVS = _rtvs)
+        fixed (CpuDescriptorHandle* RTVS = _rtvs)
         {
-            _context->OMSetRenderTargets(numRTVs, RTVS, DSV);
+            _commandList.Get()->OMSetRenderTargets(numRTVs, RTVS, RTsSingleHandleToDescriptorRange: false, pDepthStencilDescriptor: null);
         }
 
         Win32.Numerics.Viewport viewport = new((float)renderArea.Width, (float)renderArea.Height);
         RawRect scissorRect = new(0, 0, renderArea.Width, renderArea.Height);
-
-        _context->RSSetViewports(1, &viewport);
-        _context->RSSetScissorRects(1, &scissorRect); 
-#endif
+        _commandList.Get()->RSSetViewports(1, &viewport);
+        _commandList.Get()->RSSetScissorRects(1, &scissorRect);
 
         _currentRenderPass = renderPass;
     }
 
     protected override void EndRenderPassCore()
     {
-#if TODO
         if (_currentRenderPass.ColorAttachments.Length > 0)
         {
             for (int index = 0; index < _currentRenderPass.ColorAttachments.Length; index++)
@@ -210,7 +314,7 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
                 D3D12Texture texture = (D3D12Texture)attachment.Texture;
                 int mipLevel = attachment.MipLevel;
                 int slice = attachment.Slice;
-                uint srcSubResource = D3D12CalcSubresource((uint)mipLevel, (uint)slice, (uint)texture.MipLevels);
+                uint srcSubResource = D3D12CalcSubresource((uint)mipLevel, (uint)slice, 0, (uint)texture.MipLevels, (uint)texture.ArrayLayers);
 
                 switch (attachment.StoreAction)
                 {
@@ -218,18 +322,40 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
                         if (attachment.ResolveTexture is not null)
                         {
                             D3D12Texture resolveTexture = (D3D12Texture)attachment.ResolveTexture!;
-                            uint dstSubResource = D3D11CalcSubresource((uint)attachment.ResolveMipLevel, (uint)attachment.ResolveSlice, (uint)resolveTexture.MipLevels);
-                            //_context->ResolveSubresource(resolveTexture.Handle, dstSubResource, texture.Handle, srcSubResource, resolveTexture.DxgiFormat);
+                            uint dstSubResource = D3D12CalcSubresource((uint)attachment.ResolveMipLevel, (uint)attachment.ResolveSlice, 0, (uint)resolveTexture.MipLevels, (uint)resolveTexture.ArrayLayers);
+
+                            ResourceStates currentTextureState = texture.State;
+                            ResourceStates currentResolveState = ResourceStates.PixelShaderResource | ResourceStates.NonPixelShaderResource; //  resolveTexture.State;
+
+                            TransitionResource(texture, ResourceStates.ResolveSource, false);
+                            TransitionResource(resolveTexture, ResourceStates.ResolveDest, false);
+                            FlushResourceBarriers();
+
+                            _commandList.Get()->ResolveSubresource(resolveTexture.Handle, dstSubResource, texture.Handle, srcSubResource, resolveTexture.DxgiFormat);
+
+                            TransitionResource(texture, currentTextureState, false);
+                            TransitionResource(resolveTexture, currentResolveState, false);
+                            FlushResourceBarriers();
                         }
+                        else
+                        {
+                            if (texture.IsSwapChain)
+                            {
+                                TransitionResource(texture, ResourceStates.Present, true);
+                            }
+                        }
+
                         break;
 
                     case StoreAction.DontCare:
-                        _context->DiscardView((ID3D11View*)_rtvs[index]);
+                        //_commandList.Get()->DiscardView((ID3D11View*)_rtvs[index]);
                         break;
                 }
             }
         }
 
+
+#if TODO
         if (_currentRenderPass.DepthStencilAttachment.HasValue)
         {
             RenderPassDepthStencilAttachment attachment = _currentRenderPass.DepthStencilAttachment.Value;
@@ -396,7 +522,7 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
     {
         PrepareDraw();
 
-       // _commandList.Get()->DrawInstanced((uint)vertexCount, (uint)instanceCount, (uint)firstVertex, (uint)firstInstance);
+        // _commandList.Get()->DrawInstanced((uint)vertexCount, (uint)instanceCount, (uint)firstVertex, (uint)firstInstance);
     }
 
     public override void DrawIndexed(int indexCount, int instanceCount = 1, int firstIndex = 0, int baseVertex = 0, int firstInstance = 0)
@@ -408,11 +534,11 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
 
     private void PrepareDispatch()
     {
-        
+
     }
 
     private void PrepareDraw()
     {
-       
+
     }
 }

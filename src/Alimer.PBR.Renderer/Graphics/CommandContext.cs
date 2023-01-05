@@ -10,6 +10,12 @@ public abstract class CommandContext : GraphicsObject
 {
     private bool _insideRenderPass;
 
+    /// <summary>
+    /// Flush existing commands to the GPU and optinally wait for completion
+    /// </summary>
+    /// <param name="waitForCompletion"></param>
+    public abstract void Flush(bool waitForCompletion = false);
+
     public abstract void PushDebugGroup(string groupLabel);
     public abstract void PopDebugGroup();
     public abstract void InsertDebugMarker(string debugLabel);

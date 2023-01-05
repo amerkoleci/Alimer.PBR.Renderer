@@ -5,12 +5,13 @@ using Win32;
 using Win32.Graphics.Direct3D12;
 using Win32.Graphics.Dxgi.Common;
 using static Win32.Apis;
+using static Win32.Graphics.Direct3D12.Apis;
 
 namespace Alimer.Graphics.D3D12;
 
-internal sealed unsafe class D3D12Texture : Texture
+internal sealed unsafe class D3D12Texture : Texture, ID3D11GpuResource
 {
-    private readonly ID3D12Resource* _handle;
+    private readonly ComPtr<ID3D12Resource> _handle;
     private readonly CpuDescriptorHandle _srv = default;
     private readonly object _rtvLock = new();
     private readonly object _uavLock = new();
@@ -18,10 +19,10 @@ internal sealed unsafe class D3D12Texture : Texture
     private readonly Dictionary<int, CpuDescriptorHandle> _dsvs = new();
     private readonly Dictionary<int, CpuDescriptorHandle> _uavs = new();
 
-    public D3D12Texture(D3D12GraphicsDevice device, in TextureDescription description, ID3D12Resource* existingHandle)
+    public D3D12Texture(D3D12GraphicsDevice device, in TextureDescription description, in ComPtr<ID3D12Resource> existingHandle)
         : base(device, description)
     {
-        _handle = existingHandle;
+        _handle = existingHandle.Move();
         DxgiFormat = description.Format.ToDxgiFormat();
     }
 
@@ -32,12 +33,12 @@ internal sealed unsafe class D3D12Texture : Texture
         ResourceFlags resourceFlags = ResourceFlags.None;
         int sampleCount = (int)description.SampleCount;
 
-
         if ((description.Usage & TextureUsage.ShaderWrite) != 0)
         {
             resourceFlags |= ResourceFlags.AllowUnorderedAccess;
         }
 
+        State = ResourceStates.Common;
         if ((description.Usage & TextureUsage.RenderTarget) != 0)
         {
             if (description.Format.IsDepthStencilFormat())
@@ -48,10 +49,13 @@ internal sealed unsafe class D3D12Texture : Texture
                 {
                     resourceFlags |= ResourceFlags.DenyShaderResource;
                 }
+
+                State = ResourceStates.DepthWrite;
             }
             else
             {
                 resourceFlags |= ResourceFlags.AllowRenderTarget;
+                State = ResourceStates.RenderTarget;
             }
         }
 
@@ -68,43 +72,47 @@ internal sealed unsafe class D3D12Texture : Texture
 
         DxgiFormat = description.Format.ToDxgiFormat();
 
+        if (initialData != null)
+        {
+            State = ResourceStates.Common;
+        }
 
         ResourceDescription desc = ResourceDescription.Tex2D(DxgiFormat,
             (ulong)description.Width,
             (uint)description.Height,
-            (ushort)description.DepthOrArrayLayers,
+            (ushort)(description.DepthOrArrayLayers * arrayMultiplier),
             (ushort)description.MipLevels,
             (uint)sampleCount,
             0,
             resourceFlags
             );
 
-        ID3D12Resource* handle = default;
         HResult hr = device.NativeDevice->CreateCommittedResource(
             &heapProps,
             HeapFlags.None,
             &desc,
-            ResourceStates.Common,
+            State,
             null,
             __uuidof<ID3D12Resource>(),
-            (void**)&handle
+            _handle.GetVoidAddressOf()
             );
 
         if (hr.Failure)
         {
             throw new InvalidOperationException("D3D11: Failed to create texture");
         }
-        _handle = handle;
 
         if (!string.IsNullOrEmpty(description.Label))
         {
-            _handle->SetName(description.Label);
+            _handle.Get()->SetName(description.Label);
         }
 
         if ((description.Usage & TextureUsage.ShaderRead) != 0)
         {
             ShaderResourceViewDescription srvDesc = new();
             srvDesc.Format = DxgiFormat;
+            srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+
             if (description.Dimension == TextureDimension.TextureCube)
             {
                 srvDesc.ViewDimension = SrvDimension.TextureCube;
@@ -118,8 +126,8 @@ internal sealed unsafe class D3D12Texture : Texture
                 srvDesc.Texture2D.MipLevels = 1;
             }
 
-
-            //ThrowIfFailed(device.NativeDevice->CreateShaderResourceView(Handle, &srvDesc, _srv.GetAddressOf()));
+            _srv = device.AllocateDescriptor(DescriptorHeapType.CbvSrvUav);
+            device.NativeDevice->CreateShaderResourceView(_handle.Get(), &srvDesc, _srv);
         }
     }
 
@@ -129,26 +137,30 @@ internal sealed unsafe class D3D12Texture : Texture
 
         if (disposing)
         {
-            //foreach (KeyValuePair<int, ComPtr<ID3D11RenderTargetView>> kvp in _rtvs)
-            //{
-            //    kvp.Value.Dispose();
-            //}
+            D3D12GraphicsDevice backendDevice = ((D3D12GraphicsDevice)Device);
 
-            //foreach (KeyValuePair<int, ComPtr<ID3D11DepthStencilView>> kvp in _dsvs)
-            //{
-            //    kvp.Value.Dispose();
-            //}
+            foreach (KeyValuePair<int, CpuDescriptorHandle> kvp in _rtvs)
+            {
+                backendDevice.FreeDescriptor(DescriptorHeapType.Rtv, kvp.Value);
+            }
 
-            //foreach (KeyValuePair<int, ComPtr<ID3D11UnorderedAccessView>> kvp in _uavs)
-            //{
-            //    kvp.Value.Dispose();
-            //}
+            foreach (KeyValuePair<int, CpuDescriptorHandle> kvp in _dsvs)
+            {
+                backendDevice.FreeDescriptor(DescriptorHeapType.Dsv, kvp.Value);
+            }
+
+            foreach (KeyValuePair<int, CpuDescriptorHandle> kvp in _uavs)
+            {
+                backendDevice.FreeDescriptor(DescriptorHeapType.CbvSrvUav, kvp.Value);
+            }
 
             _rtvs.Clear();
             _dsvs.Clear();
             _uavs.Clear();
             //_srv.Dispose();
-            _handle->Release();
+
+            //backendDevice.DeferDestroy((IUnknown*)_handle.Get());
+            _handle.Dispose();
         }
     }
 
@@ -157,8 +169,13 @@ internal sealed unsafe class D3D12Texture : Texture
         Handle->SetName(newLabel);
     }
 
-    public Format DxgiFormat { get; }
     public ID3D12Resource* Handle => _handle;
+    public Format DxgiFormat { get; }
+    public bool IsSwapChain { get; set; }
+
+    public ResourceStates State { get; set; }
+    public ResourceStates TransitioningState { get; set; } = (ResourceStates)uint.MaxValue;
+
     public CpuDescriptorHandle SRV => _srv;
 
     internal CpuDescriptorHandle GetRTV(int mipLevel, int slice)
@@ -223,7 +240,8 @@ internal sealed unsafe class D3D12Texture : Texture
                         break;
                 }
 
-                //ThrowIfFailed(((D3D12GraphicsDevice)Device).NativeDevice->CreateRenderTargetView(Handle, &viewDesc, rtv.GetAddressOf()));
+                rtv = ((D3D12GraphicsDevice)Device).AllocateDescriptor(DescriptorHeapType.Rtv);
+                ((D3D12GraphicsDevice)Device).NativeDevice->CreateRenderTargetView(Handle, &viewDesc, rtv);
                 _rtvs.Add(hashCode, rtv);
             }
 
@@ -293,7 +311,8 @@ internal sealed unsafe class D3D12Texture : Texture
                         break;
                 }
 
-                //ThrowIfFailed(((D3D12GraphicsDevice)Device).NativeDevice->CreateDepthStencilView(Handle, &viewDesc, dsv.GetAddressOf()));
+                dsv = ((D3D12GraphicsDevice)Device).AllocateDescriptor(DescriptorHeapType.Dsv);
+                ((D3D12GraphicsDevice)Device).NativeDevice->CreateDepthStencilView(Handle, &viewDesc, dsv);
                 _dsvs.Add(hashCode, dsv);
             }
 
@@ -325,8 +344,8 @@ internal sealed unsafe class D3D12Texture : Texture
                     uavDesc.Texture2DArray.ArraySize = (uint)ArrayLayers;
                 }
 
-
-                //ThrowIfFailed(((D3D12GraphicsDevice)Device).NativeDevice->CreateUnorderedAccessView(Handle, &uavDesc, uav.GetAddressOf()));
+                uav = ((D3D12GraphicsDevice)Device).AllocateDescriptor(DescriptorHeapType.CbvSrvUav);
+                ((D3D12GraphicsDevice)Device).NativeDevice->CreateUnorderedAccessView(Handle, null, &uavDesc, uav);
                 _uavs.Add(mipLevel, uav);
             }
 

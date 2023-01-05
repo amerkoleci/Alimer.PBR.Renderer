@@ -58,6 +58,15 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
         }
     }
 
+    public override void Flush(bool waitForCompletion = false)
+    {
+        if (waitForCompletion)
+        {
+            _context->Flush();
+        }
+    }
+
+
     public override void PushDebugGroup(string groupLabel)
     {
         _annotation.Get()->BeginEvent(groupLabel);

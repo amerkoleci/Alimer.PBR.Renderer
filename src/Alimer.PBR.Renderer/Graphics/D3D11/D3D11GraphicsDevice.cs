@@ -235,7 +235,7 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
 
         if (disposing)
         {
-            _colorTexture.Dispose();
+            _colorTexture!.Dispose();
             _swapChain.Dispose();
             DefaultContext.Dispose();
             _context.Dispose();

@@ -1,9 +1,7 @@
 ﻿// Copyright © Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
-using Win32;
 using Win32.Graphics.Direct3D12;
-using D3D11SamplerDesc = Win32.Graphics.Direct3D12.SamplerDescription;
 using static Win32.Graphics.Direct3D12.Apis;
 
 namespace Alimer.Graphics.D3D12;
@@ -21,7 +19,7 @@ internal sealed unsafe class D3D12Sampler : Sampler
 
         FilterReductionType reduction = description.Compare != CompareFunction.Never ? FilterReductionType.Comparison : FilterReductionType.Standard;
 
-        D3D11SamplerDesc d3dDesc = new();
+        Win32.Graphics.Direct3D12.SamplerDescription d3dDesc = new();
 
         // https://docs.microsoft.com/en-us/windows/win32/api/d3d12/ns-d3d12-d3d12_sampler_desc
         d3dDesc.MaxAnisotropy = Math.Min(Math.Max(description.MaxAnisotropy, 1u), 16u);
