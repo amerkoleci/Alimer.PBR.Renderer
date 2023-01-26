@@ -26,7 +26,7 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
     private readonly ComPtr<ID3D12GraphicsCommandList> _commandList;
 
     private readonly ResourceBarrier[] _resourceBarriers = new ResourceBarrier[16];
-    private uint _numBarriersToFlush;
+    private int _numBarriersToFlush;
 
     private D3D12Pipeline? _currentPipeline;
     private D3DPrimitiveTopology _currentPrimitiveTopology;
@@ -137,10 +137,7 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
     {
         if (_numBarriersToFlush > 0)
         {
-            fixed (ResourceBarrier* pBarriers = _resourceBarriers)
-            {
-                _commandList.Get()->ResourceBarrier(_numBarriersToFlush, pBarriers);
-            }
+            _commandList.Get()->ResourceBarrier(_numBarriersToFlush, _resourceBarriers);
 
             _numBarriersToFlush = 0;
         }
