@@ -3,22 +3,21 @@
 
 using System.Drawing;
 using System.Text;
-using Alimer.Bindings.SDL;
 using CommunityToolkit.Diagnostics;
+using SDL;
 using Win32;
 using Win32.Graphics.Direct3D;
 using Win32.Graphics.Direct3D.Fxc;
 using Win32.Graphics.Direct3D11;
 using Win32.Graphics.Dxgi;
 using Win32.Graphics.Dxgi.Common;
-using static Alimer.Bindings.SDL.SDL;
-using static Alimer.Bindings.SDL.SDL.SDL_WindowFlags;
 using static Win32.Apis;
 using static Win32.Graphics.Direct3D.Fxc.Apis;
 using static Win32.Graphics.Direct3D11.Apis;
 using static Win32.Graphics.Dxgi.Apis;
 using InfoQueueFilter = Win32.Graphics.Direct3D11.InfoQueueFilter;
 using MessageId = Win32.Graphics.Direct3D11.MessageId;
+using static SDL.SDL;
 
 namespace Alimer.Graphics.D3D11;
 
@@ -187,11 +186,10 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
         // Create SwapChain
         {
             SDL_SysWMinfo info = new();
-            SDL_VERSION(out info.version);
-            SDL_GetWindowWMInfo(window, ref info);
+            SDL_GetWindowWMInfo(window, &info);
             Guard.IsTrue(info.subsystem == SDL_SYSWM_TYPE.SDL_SYSWM_WINDOWS);
 
-            bool isFullscreen = (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0;
+            bool isFullscreen = (SDL_GetWindowFlags(window) & SDL_WindowFlags.Fullscreen) != 0;
 
             SwapChainDescription1 swapChainDesc = new()
             {

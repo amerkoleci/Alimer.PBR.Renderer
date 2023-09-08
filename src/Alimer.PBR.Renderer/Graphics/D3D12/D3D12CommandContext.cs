@@ -100,7 +100,7 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
             if (newState == resource.TransitioningState)
             {
                 barrierDesc.Flags = ResourceBarrierFlags.EndOnly;
-                resource.TransitioningState = (ResourceStates)uint.MaxValue;
+                resource.TransitioningState = (ResourceStates)(-1);
             }
             else
             {
@@ -292,7 +292,7 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
         }
 
         Win32.Numerics.Viewport viewport = new((float)renderArea.Width, (float)renderArea.Height);
-        RawRect scissorRect = new(0, 0, renderArea.Width, renderArea.Height);
+        Win32.Numerics.Rect scissorRect = new(0, 0, renderArea.Width, renderArea.Height);
         _commandList.Get()->RSSetViewports(1, &viewport);
         _commandList.Get()->RSSetScissorRects(1, &scissorRect);
 

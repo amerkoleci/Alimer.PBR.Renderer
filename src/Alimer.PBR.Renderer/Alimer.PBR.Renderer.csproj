@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net7.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
@@ -10,12 +10,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Diagnostics" />
-    <PackageReference Include="Vortice.Mathematics" />
     <PackageReference Include="Alimer.Bindings.SDL" />
-    <PackageReference Include="Vortice.Win32.Graphics.Dxgi" />
-    <PackageReference Include="Vortice.Win32.Graphics.Direct3D11" />
-    <PackageReference Include="Vortice.Win32.Graphics.Direct3D12" />
     <PackageReference Include="Vortice.Win32.Graphics.Direct3D.Fxc" />
     <!--<PackageReference Include="Vortice.Vulkan" />-->
 
@@ -23,6 +18,10 @@
     <PackageReference Include="SharpGLTF.Core" />
     <PackageReference Include="Silk.NET.Assimp" />
     
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Alimer.Graphics\Alimer.Graphics.csproj" />
   </ItemGroup>
 
 </Project>

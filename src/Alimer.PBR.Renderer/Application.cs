@@ -6,14 +6,14 @@ using System.Drawing;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using Alimer.Bindings.SDL;
 using Alimer.Graphics;
 using Alimer.Graphics.D3D11;
 using CommunityToolkit.Diagnostics;
+using SDL;
 using Vortice.Mathematics;
-using static Alimer.Bindings.SDL.SDL;
-using static Alimer.Bindings.SDL.SDL.SDL_EventType;
-using static Alimer.Bindings.SDL.SDL.SDL_WindowFlags;
+using static SDL.SDL;
+using static SDL.SDL_EventType;
+using static SDL.SDL_InitFlags;
 
 namespace Alimer.PBR.Renderer;
 
@@ -40,9 +40,8 @@ public sealed class Application : GraphicsObject
         RotatingScene,
     }
     private InputMode _mode;
-    private int _prevCursorX;
-    private int _prevCursorY;
-
+    private float _prevCursorX;
+    private float _prevCursorY;
 
     private readonly Texture _fboColorTexture;
     private readonly Texture _fboDepthStencilTexture;
@@ -79,10 +78,6 @@ public sealed class Application : GraphicsObject
         SDL_GetVersion(out SDL_version version);
         //Log.Info($"SDL v{version.major}.{version.minor}.{version.patch}");
 
-        // DPI aware on Windows
-        SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
-        SDL_SetHint(SDL_HINT_WINDOWS_DPI_SCALING, true);
-
         // Init SDL
         if (SDL_Init(SDL_INIT_TIMER | SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)
         {
@@ -90,9 +85,9 @@ public sealed class Application : GraphicsObject
             throw new Exception($"Failed to start SDL2: {error}");
         }
 
-        SDL_WindowFlags flags = SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE;
+        SDL_WindowFlags flags = SDL_WindowFlags.Hidden | SDL_WindowFlags.Resizable;
 
-        _window = SDL_CreateWindow("Physically Based Rendering (Direct3D 11)",
+        _window = SDL_CreateWindowWithPosition("Physically Based Rendering (Direct3D 11)",
             SDL_WINDOWPOS_CENTERED,
             SDL_WINDOWPOS_CENTERED,
             width, height, flags);
@@ -524,7 +519,7 @@ public sealed class Application : GraphicsObject
 
         do
         {
-            eventsRead = SDL_PeepEvents(_events, _eventsPerPeep, SDL_eventaction.SDL_GETEVENT, SDL_EventType.SDL_FIRSTEVENT, SDL_EventType.SDL_LASTEVENT);
+            eventsRead = SDL_PeepEvents(_events, _eventsPerPeep, SDL_eventaction.SDL_GETEVENT, SDL_EventType.SDL_FIRSTEVENT, SDL_EventType.SDL_EVENT_LAST);
             for (int i = 0; i < eventsRead; i++)
             {
                 HandleSDLEvent(_events[i]);
@@ -537,19 +532,15 @@ public sealed class Application : GraphicsObject
         switch (evt.type)
         {
             case SDL_QUIT:
-            case SDL_APP_TERMINATING:
+            case SDL_EVENT_TERMINATING:
                 _exitRequested = true;
                 break;
 
-            case SDL_WINDOWEVENT:
-                HandleWindowEvent(evt);
-                break;
-
-            case SDL_MOUSEWHEEL:
+            case SDL_EVENT_MOUSE_WHEEL:
                 _viewSettings.Distance += ZoomSpeed * -evt.wheel.y;
                 break;
 
-            case SDL_MOUSEBUTTONDOWN:
+            case  SDL_EVENT_MOUSE_BUTTON_DOWN:
                 if (_mode == InputMode.None)
                 {
                     if (evt.button.button == 1)
@@ -563,7 +554,7 @@ public sealed class Application : GraphicsObject
                 }
                 break;
 
-            case SDL_MOUSEBUTTONUP:
+            case SDL_EVENT_MOUSE_BUTTON_UP:
                 if (evt.button.button == 1)
                     _mode = InputMode.None;
                 if (evt.button.button == 3)
@@ -571,11 +562,11 @@ public sealed class Application : GraphicsObject
                 SDL_ShowCursor(1);
                 break;
 
-            case SDL_MOUSEMOTION:
+            case SDL_EVENT_MOUSE_MOTION:
                 if (_mode != InputMode.None)
                 {
-                    int dx = evt.button.x - _prevCursorX;
-                    int dy = evt.button.y - _prevCursorY;
+                    float dx = evt.button.x - _prevCursorX;
+                    float dy = evt.button.y - _prevCursorY;
 
                     switch (_mode)
                     {
@@ -594,7 +585,7 @@ public sealed class Application : GraphicsObject
                 }
                 break;
 
-            case SDL_KEYDOWN:
+            case SDL_EVENT_KEY_DOWN:
                 if (evt.key.keysym.sym == SDL_Keycode.SDLK_F1)
                 {
                     _lights[0].Enabled = !_lights[0].Enabled;
@@ -609,7 +600,14 @@ public sealed class Application : GraphicsObject
                 }
                 break;
 
-            case SDL_KEYUP:
+            case SDL_EVENT_KEY_UP:
+                break;
+
+            default:
+                if (evt.type >= SDL_EVENT_WINDOW_FIRST && evt.type <= SDL_EVENT_WINDOW_LAST)
+                {
+                    HandleWindowEvent(evt);
+                }
                 break;
 
         }

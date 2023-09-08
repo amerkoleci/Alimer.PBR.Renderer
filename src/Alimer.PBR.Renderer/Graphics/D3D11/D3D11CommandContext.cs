@@ -183,7 +183,7 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
         }
 
         Win32.Numerics.Viewport viewport = new((float)renderArea.Width, (float)renderArea.Height);
-        RawRect scissorRect = new(0, 0, renderArea.Width, renderArea.Height);
+        Win32.Numerics.Rect scissorRect = new(0, 0, renderArea.Width, renderArea.Height);
 
         _context->RSSetViewports(1, &viewport);
         _context->RSSetScissorRects(1, &scissorRect);

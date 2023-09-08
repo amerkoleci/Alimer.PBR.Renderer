@@ -174,7 +174,7 @@ internal sealed unsafe class D3D12Texture : Texture, ID3D11GpuResource
     public bool IsSwapChain { get; set; }
 
     public ResourceStates State { get; set; }
-    public ResourceStates TransitioningState { get; set; } = (ResourceStates)uint.MaxValue;
+    public ResourceStates TransitioningState { get; set; } = (ResourceStates)(-1);
 
     public CpuDescriptorHandle SRV => _srv;
 

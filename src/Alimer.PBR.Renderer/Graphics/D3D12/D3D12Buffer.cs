@@ -69,7 +69,7 @@ internal sealed unsafe class D3D12Buffer : GraphicsBuffer, ID3D11GpuResource
 
     public ID3D12Resource* Handle => _handle;
     public ResourceStates State { get; set; }
-    public ResourceStates TransitioningState { get; set; } = (ResourceStates)uint.MaxValue;
+    public ResourceStates TransitioningState { get; set; } = (ResourceStates)(-1);
 
     public bool IsDynamic { get; }
 

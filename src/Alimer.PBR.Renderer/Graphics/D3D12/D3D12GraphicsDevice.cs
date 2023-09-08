@@ -2,21 +2,20 @@
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using System.Drawing;
-using Alimer.Bindings.SDL;
 using CommunityToolkit.Diagnostics;
+using SDL;
 using Win32;
 using Win32.Graphics.Direct3D;
 using Win32.Graphics.Direct3D12;
 using Win32.Graphics.Dxgi;
 using Win32.Graphics.Dxgi.Common;
-using static Alimer.Bindings.SDL.SDL;
-using static Alimer.Bindings.SDL.SDL.SDL_WindowFlags;
 using static Win32.Apis;
 using static Win32.Graphics.Direct3D12.Apis;
 using static Win32.Graphics.Dxgi.Apis;
 using Feature = Win32.Graphics.Direct3D12.Feature;
 using InfoQueueFilter = Win32.Graphics.Direct3D12.InfoQueueFilter;
 using MessageId = Win32.Graphics.Direct3D12.MessageId;
+using static SDL.SDL;
 
 namespace Alimer.Graphics.D3D12;
 
@@ -276,11 +275,10 @@ public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
         // Create SwapChain
         {
             SDL_SysWMinfo info = new();
-            SDL_VERSION(out info.version);
-            SDL_GetWindowWMInfo(window, ref info);
+            SDL_GetWindowWMInfo(window, &info);
             Guard.IsTrue(info.subsystem == SDL_SYSWM_TYPE.SDL_SYSWM_WINDOWS);
 
-            bool isFullscreen = (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0;
+            bool isFullscreen = (SDL_GetWindowFlags(window) & SDL_WindowFlags.Fullscreen) != 0;
 
             SwapChainDescription1 swapChainDesc = new()
             {
