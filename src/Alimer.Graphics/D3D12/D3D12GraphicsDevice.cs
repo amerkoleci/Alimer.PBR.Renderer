@@ -3,7 +3,6 @@
 
 using System.Drawing;
 using CommunityToolkit.Diagnostics;
-using SDL;
 using Win32;
 using Win32.Graphics.Direct3D;
 using Win32.Graphics.Direct3D12;
@@ -15,11 +14,10 @@ using static Win32.Graphics.Dxgi.Apis;
 using Feature = Win32.Graphics.Direct3D12.Feature;
 using InfoQueueFilter = Win32.Graphics.Direct3D12.InfoQueueFilter;
 using MessageId = Win32.Graphics.Direct3D12.MessageId;
-using static SDL.SDL;
 
 namespace Alimer.Graphics.D3D12;
 
-public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
+internal sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
 {
     private static readonly FeatureLevel s_minFeatureLevel = FeatureLevel.Level_11_0;
 
@@ -63,8 +61,8 @@ public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
 
     public override TextureSampleCount SampleCount { get; }
 
-    public D3D12GraphicsDevice(in SDL_Window window, TextureSampleCount maxSamples = TextureSampleCount.Count4)
-        : base(window, GraphicsBackend.Direct3D12)
+    public D3D12GraphicsDevice(in nint window, bool isFullscreen, TextureSampleCount maxSamples = TextureSampleCount.Count4)
+        : base(GraphicsBackend.Direct3D12, window, isFullscreen)
     {
         uint dxgiFactoryFlags = 0u;
 
@@ -274,12 +272,6 @@ public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
 
         // Create SwapChain
         {
-            SDL_SysWMinfo info = new();
-            SDL_GetWindowWMInfo(window, &info);
-            Guard.IsTrue(info.subsystem == SDL_SYSWM_TYPE.SDL_SYSWM_WINDOWS);
-
-            bool isFullscreen = (SDL_GetWindowFlags(window) & SDL_WindowFlags.Fullscreen) != 0;
-
             SwapChainDescription1 swapChainDesc = new()
             {
                 Width = 0u,
@@ -302,7 +294,7 @@ public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
             using ComPtr<IDXGISwapChain1> tempSwapChain = default;
             hr = _dxgiFactory.Get()->CreateSwapChainForHwnd(
                 (IUnknown*)_graphicsQueue.Get(),
-                info.info.win.window,
+                Window,
                 &swapChainDesc,
                 &fsSwapChainDesc,
                 null,
@@ -311,7 +303,7 @@ public sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
             ThrowIfFailed(hr);
             ThrowIfFailed(tempSwapChain.CopyTo(_swapChain.GetAddressOf()));
 
-            _dxgiFactory.Get()->MakeWindowAssociation(info.info.win.window, WindowAssociationFlags.NoAltEnter);
+            _dxgiFactory.Get()->MakeWindowAssociation(Window, WindowAssociationFlags.NoAltEnter);
             AfterResize();
         }
     }

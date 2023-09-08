@@ -3,7 +3,6 @@
 
 using System.Runtime.InteropServices;
 using CommunityToolkit.Diagnostics;
-using SDL;
 
 namespace Alimer.Graphics;
 
@@ -11,13 +10,15 @@ public abstract class GraphicsDevice : GraphicsObject
 {
     public static readonly int NumFramesInFlight = 2;
 
-    protected GraphicsDevice(in SDL_Window window, GraphicsBackend backend)
+    protected GraphicsDevice(GraphicsBackend backend, in nint window, bool isFullscreen)
     {
-        Window = window;
         Backend = backend;
+        Window = window;
+        IsFullscreen = isFullscreen;
     }
 
-    public readonly SDL_Window Window;
+    public readonly nint Window;
+    public readonly bool IsFullscreen;
 
     /// <summary>
     /// Get the device backend type.
@@ -28,12 +29,12 @@ public abstract class GraphicsDevice : GraphicsObject
     public abstract Texture ColorTexture { get; }
     public abstract TextureSampleCount SampleCount { get; }
 
-    public static GraphicsDevice CreateDefault(GraphicsBackend graphicsBackend, in SDL_Window window, TextureSampleCount maxSamples = TextureSampleCount.Count4)
+    public static GraphicsDevice CreateDefault(GraphicsBackend graphicsBackend, in nint window, bool isFullscreen, TextureSampleCount maxSamples = TextureSampleCount.Count4)
     {
         if (graphicsBackend == GraphicsBackend.Direct3D12)
-            return new D3D12.D3D12GraphicsDevice(window, maxSamples);
+            return new D3D12.D3D12GraphicsDevice(window, isFullscreen, maxSamples);
 
-        return new D3D11.D3D11GraphicsDevice(window, maxSamples);
+        return new D3D11.D3D11GraphicsDevice(window, isFullscreen, maxSamples);
     }
 
     public abstract bool BeginFrame();

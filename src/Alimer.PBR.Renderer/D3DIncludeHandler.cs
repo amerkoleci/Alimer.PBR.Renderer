@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 using Win32;
 using Win32.Graphics.Direct3D;
 
-namespace Alimer.Graphics.D3D11;
+namespace Alimer.Graphics;
 
 internal unsafe struct D3DIncludeHandler : D3DIncludeHandler.Interface
 {

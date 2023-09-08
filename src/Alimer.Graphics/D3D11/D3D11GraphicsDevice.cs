@@ -2,26 +2,20 @@
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using System.Drawing;
-using System.Text;
-using CommunityToolkit.Diagnostics;
-using SDL;
 using Win32;
 using Win32.Graphics.Direct3D;
-using Win32.Graphics.Direct3D.Fxc;
 using Win32.Graphics.Direct3D11;
 using Win32.Graphics.Dxgi;
 using Win32.Graphics.Dxgi.Common;
 using static Win32.Apis;
-using static Win32.Graphics.Direct3D.Fxc.Apis;
 using static Win32.Graphics.Direct3D11.Apis;
 using static Win32.Graphics.Dxgi.Apis;
 using InfoQueueFilter = Win32.Graphics.Direct3D11.InfoQueueFilter;
 using MessageId = Win32.Graphics.Direct3D11.MessageId;
-using static SDL.SDL;
 
 namespace Alimer.Graphics.D3D11;
 
-public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
+internal sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
 {
     private readonly ComPtr<IDXGIFactory2> _dxgiFactory;
     private readonly bool _isTearingSupported;
@@ -42,8 +36,8 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
 
     public override TextureSampleCount SampleCount { get; }
 
-    public D3D11GraphicsDevice(in SDL_Window window, TextureSampleCount maxSamples = TextureSampleCount.Count4)
-        : base(window, GraphicsBackend.Direct3D11)
+    public D3D11GraphicsDevice(in nint window, bool isFullscreen, TextureSampleCount maxSamples = TextureSampleCount.Count4)
+        : base(GraphicsBackend.Direct3D11, window, isFullscreen)
     {
 #if DEBUG
         {
@@ -185,12 +179,6 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
 
         // Create SwapChain
         {
-            SDL_SysWMinfo info = new();
-            SDL_GetWindowWMInfo(window, &info);
-            Guard.IsTrue(info.subsystem == SDL_SYSWM_TYPE.SDL_SYSWM_WINDOWS);
-
-            bool isFullscreen = (SDL_GetWindowFlags(window) & SDL_WindowFlags.Fullscreen) != 0;
-
             SwapChainDescription1 swapChainDesc = new()
             {
                 Width = 0u,
@@ -212,7 +200,7 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
 
             result = _dxgiFactory.Get()->CreateSwapChainForHwnd(
                  (IUnknown*)_device.Get(),
-                info.info.win.window,
+                Window,
                 &swapChainDesc,
                 &fsSwapChainDesc,
                 null,
@@ -220,7 +208,7 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
                 );
             ThrowIfFailed(result);
 
-            _dxgiFactory.Get()->MakeWindowAssociation(info.info.win.window, WindowAssociationFlags.NoAltEnter);
+            _dxgiFactory.Get()->MakeWindowAssociation(Window, WindowAssociationFlags.NoAltEnter);
             AfterResize();
         }
     }
@@ -304,67 +292,6 @@ public sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
     public override Pipeline CreateRenderPipeline(in RenderPipelineDescription description)
     {
         return new D3D11Pipeline(this, description);
-    }
-
-    private static readonly D3DIncludeHandler* s_D3DIncludeHandler = D3DIncludeHandler.Create();
-
-    public static ReadOnlyMemory<byte> CompileBytecode(string shaderSource, string entryPoint, string profile, string? sourceName = default)
-    {
-        CompileFlags shaderFlags = CompileFlags.EnableStrictness;
-#if DEBUG
-        shaderFlags |= CompileFlags.Debug;
-        shaderFlags |= CompileFlags.SkipValidation;
-#else
-        shaderFlags |= CompileFlags.OptimizationLevel3;
-#endif
-
-        if(!string.IsNullOrEmpty(sourceName))
-        {
-            D3DIncludeHandler.IncludeDirectory = Path.GetDirectoryName(sourceName);
-        }
-
-        var shaderSourceUtf8 = Encoding.UTF8.GetBytes(shaderSource);
-        var entryPointUtf8 = Encoding.UTF8.GetBytes(entryPoint);
-        var profileUtf8 = Encoding.UTF8.GetBytes(profile);
-        byte[] sourceNameUtf8 = string.IsNullOrEmpty(sourceName) ? Array.Empty<byte>() : Encoding.UTF8.GetBytes(sourceName);
-
-        using ComPtr<ID3DBlob> d3dBlobBytecode = default;
-        using ComPtr<ID3DBlob> d3dBlobErrors = default;
-
-        fixed (byte* sourcePtr = shaderSourceUtf8)
-        fixed (byte* entryPointPtr = entryPointUtf8)
-        fixed (byte* targetPtr = profileUtf8)
-        fixed (byte* sourceNamePtr = sourceNameUtf8)
-        {
-            HResult hr = D3DCompile(
-                pSrcData: sourcePtr,
-                SrcDataSize: (nuint)shaderSourceUtf8.Length,
-                pSourceName: string.IsNullOrEmpty(sourceName) ? (sbyte*)sourceNamePtr : null,
-                pDefines: null,
-                pInclude: (ID3DInclude*)s_D3DIncludeHandler,
-                pEntrypoint: (sbyte*)entryPointPtr,
-                pTarget: (sbyte*)targetPtr,
-                Flags1: shaderFlags,
-                Flags2: 0u,
-                ppCode: d3dBlobBytecode.GetAddressOf(),
-                ppErrorMsgs: d3dBlobErrors.GetAddressOf()
-                );
-
-            if (hr.Failure)
-            {
-                // Throw if an error was retrieved, then also double check the HRESULT
-                if (d3dBlobErrors.Get() is not null)
-                {
-                    string message = new((sbyte*)d3dBlobErrors.Get()->GetBufferPointer());
-                }
-            }
-
-            ThrowIfFailed(hr);
-
-            Span<byte> result = new byte[d3dBlobBytecode.Get()->GetBufferSize()];
-            new Span<byte>(d3dBlobBytecode.Get()->GetBufferPointer(), (int)d3dBlobBytecode.Get()->GetBufferSize()).CopyTo(result);
-            return result.ToArray();
-        }
     }
 
 #if DEBUG

@@ -7,13 +7,18 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Alimer.Graphics;
-using Alimer.Graphics.D3D11;
 using CommunityToolkit.Diagnostics;
 using SDL;
 using Vortice.Mathematics;
 using static SDL.SDL;
 using static SDL.SDL_EventType;
 using static SDL.SDL_InitFlags;
+using Win32.Graphics.Direct3D.Fxc;
+using static Win32.Graphics.Direct3D.Fxc.Apis;
+using System.Text;
+using Win32;
+using Win32.Graphics.Direct3D;
+using static Win32.Apis;
 
 namespace Alimer.PBR.Renderer;
 
@@ -73,7 +78,7 @@ public sealed class Application : GraphicsObject
 
     public Size Size { get; private set; }
 
-    public Application(GraphicsBackend graphicsBackend, int width = 1024, int height = 800, TextureSampleCount maxSamples = TextureSampleCount.Count16)
+    public unsafe Application(GraphicsBackend graphicsBackend, int width = 1024, int height = 800, TextureSampleCount maxSamples = TextureSampleCount.Count16)
     {
         SDL_GetVersion(out SDL_version version);
         //Log.Info($"SDL v{version.major}.{version.minor}.{version.patch}");
@@ -94,7 +99,13 @@ public sealed class Application : GraphicsObject
 
         Size = new Size(width, height);
 
-        _graphicsDevice = GraphicsDevice.CreateDefault(graphicsBackend, _window, maxSamples);
+        SDL_SysWMinfo info = new();
+        SDL_GetWindowWMInfo(_window, &info);
+        Guard.IsTrue(info.subsystem == SDL_SYSWM_TYPE.SDL_SYSWM_WINDOWS);
+
+        bool isFullscreen = (SDL_GetWindowFlags(_window) & SDL_WindowFlags.Fullscreen) != 0;
+
+        _graphicsDevice = GraphicsDevice.CreateDefault(graphicsBackend, info.info.win.window, isFullscreen, maxSamples);
         _viewSettings = new(0.0f, 0.0f, 150.0f, 45.0f);
 
         _lights[0].Direction = Vector3.Normalize(new Vector3(-1.0f, 0.0f, 0.0f));
@@ -159,8 +170,8 @@ public sealed class Application : GraphicsObject
         _perViewData = AddDisposable(new ConstantBuffer<PerViewData>(_graphicsDevice, "PerView"));
         _shadingCB = AddDisposable(new ConstantBuffer<ShadingCB>(_graphicsDevice, "Shading"));
 
-        //_pbrMesh = AddDisposable(MeshFromGlbFile("DamagedHelmet.glb"));
-        _pbrMesh = AddDisposable(MeshFromFile("cerberus.fbx"));
+        _pbrMesh = AddDisposable(MeshFromGltf("DamagedHelmet.glb"));
+        //_pbrMesh = AddDisposable(MeshFromFile("cerberus.fbx"));
         _albedoTexture = AddDisposable(CreateTexture(ImageFromFile("cerberus_A.png"), TextureFormat.Rgba8UnormSrgb));
         _normalTexture = AddDisposable(CreateTexture(ImageFromFile("cerberus_N.png"), TextureFormat.Rgba8Unorm));
         _metalnessTexture = AddDisposable(CreateTexture(ImageFromFile("cerberus_M.png", 1), TextureFormat.R8Unorm));
@@ -321,9 +332,9 @@ public sealed class Application : GraphicsObject
         return Mesh.FromFile(_graphicsDevice, Path.Combine(AppContext.BaseDirectory, "assets", "meshes", fileName));
     }
 
-    private Mesh MeshFromGlbFile(string fileName)
+    private Mesh MeshFromGltf(string fileName)
     {
-        return Mesh.FromGlbFile(_graphicsDevice, Path.Combine(AppContext.BaseDirectory, "assets", "meshes", fileName));
+        return Mesh.FromGltf(_graphicsDevice, Path.Combine(AppContext.BaseDirectory, "assets", "meshes", fileName));
     }
 
     private static ReadOnlyMemory<byte> CompileShader(string fileName, string entryPoint, string profile)
@@ -331,9 +342,69 @@ public sealed class Application : GraphicsObject
         string filePath = Path.Combine(AppContext.BaseDirectory, "assets", "shaders", "hlsl", fileName);
         string shaderSource = File.ReadAllText(filePath);
 
-        return D3D11GraphicsDevice.CompileBytecode(shaderSource, entryPoint, profile, filePath);
+        return CompileBytecode(shaderSource, entryPoint, profile, filePath);
     }
 
+    private static unsafe readonly D3DIncludeHandler* s_D3DIncludeHandler = D3DIncludeHandler.Create();
+
+    public static unsafe ReadOnlyMemory<byte> CompileBytecode(string shaderSource, string entryPoint, string profile, string? sourceName = default)
+    {
+        CompileFlags shaderFlags = CompileFlags.EnableStrictness;
+#if DEBUG
+        shaderFlags |= CompileFlags.Debug;
+        shaderFlags |= CompileFlags.SkipValidation;
+#else
+        shaderFlags |= CompileFlags.OptimizationLevel3;
+#endif
+
+        if (!string.IsNullOrEmpty(sourceName))
+        {
+            D3DIncludeHandler.IncludeDirectory = Path.GetDirectoryName(sourceName);
+        }
+
+        var shaderSourceUtf8 = Encoding.UTF8.GetBytes(shaderSource);
+        var entryPointUtf8 = Encoding.UTF8.GetBytes(entryPoint);
+        var profileUtf8 = Encoding.UTF8.GetBytes(profile);
+        byte[] sourceNameUtf8 = string.IsNullOrEmpty(sourceName) ? Array.Empty<byte>() : Encoding.UTF8.GetBytes(sourceName);
+
+        using ComPtr<ID3DBlob> d3dBlobBytecode = default;
+        using ComPtr<ID3DBlob> d3dBlobErrors = default;
+
+        fixed (byte* sourcePtr = shaderSourceUtf8)
+        fixed (byte* entryPointPtr = entryPointUtf8)
+        fixed (byte* targetPtr = profileUtf8)
+        fixed (byte* sourceNamePtr = sourceNameUtf8)
+        {
+            HResult hr = D3DCompile(
+                pSrcData: sourcePtr,
+                SrcDataSize: (nuint)shaderSourceUtf8.Length,
+                pSourceName: string.IsNullOrEmpty(sourceName) ? (sbyte*)sourceNamePtr : null,
+                pDefines: null,
+                pInclude: (ID3DInclude*)s_D3DIncludeHandler,
+                pEntrypoint: (sbyte*)entryPointPtr,
+                pTarget: (sbyte*)targetPtr,
+                Flags1: shaderFlags,
+                Flags2: 0u,
+                ppCode: d3dBlobBytecode.GetAddressOf(),
+                ppErrorMsgs: d3dBlobErrors.GetAddressOf()
+                );
+
+            if (hr.Failure)
+            {
+                // Throw if an error was retrieved, then also double check the HRESULT
+                if (d3dBlobErrors.Get() is not null)
+                {
+                    string message = new((sbyte*)d3dBlobErrors.Get()->GetBufferPointer());
+                }
+            }
+
+            ThrowIfFailed(hr);
+
+            Span<byte> result = new byte[d3dBlobBytecode.Get()->GetBufferSize()];
+            new Span<byte>(d3dBlobBytecode.Get()->GetBufferPointer(), (int)d3dBlobBytecode.Get()->GetBufferSize()).CopyTo(result);
+            return result.ToArray();
+        }
+    }
 
     private Texture CreateTextureCube(TextureFormat format, int width, int height, int levels = 0)
     {

@@ -15,13 +15,13 @@ public sealed class Mesh : GraphicsObject
         PostProcessSteps.FindDegenerates
         | PostProcessSteps.FindInvalidData
         //| PostProcessSteps.FlipUVs               // Required for Direct3D
-        | PostProcessSteps.FlipWindingOrder      
-        | PostProcessSteps.JoinIdenticalVertices 
-        | PostProcessSteps.ImproveCacheLocality 
-        | PostProcessSteps.OptimizeMeshes 
+        | PostProcessSteps.FlipWindingOrder
+        | PostProcessSteps.JoinIdenticalVertices
+        | PostProcessSteps.ImproveCacheLocality
+        | PostProcessSteps.OptimizeMeshes
         | PostProcessSteps.Triangulate
         | PostProcessSteps.PreTransformVertices
-        | PostProcessSteps.GenerateNormals 
+        | PostProcessSteps.GenerateNormals
         | PostProcessSteps.CalculateTangentSpace
         // | PostProcessSteps.GenerateUVCoords
         // | PostProcessSteps.SortByPrimitiveType
@@ -67,10 +67,10 @@ public sealed class Mesh : GraphicsObject
         return FromStream(graphicsDevice, stream);
     }
 
-    public static Mesh FromGlbFile(GraphicsDevice graphicsDevice, string filePath)
+    public static Mesh FromGltf(GraphicsDevice graphicsDevice, string filePath)
     {
         using FileStream stream = new(filePath, FileMode.Open);
-        return FromGlbStream(graphicsDevice, stream);
+        return FromGltfStream(graphicsDevice, stream);
     }
 
     public static Mesh FromStream(GraphicsDevice graphicsDevice, Stream stream)
@@ -85,9 +85,14 @@ public sealed class Mesh : GraphicsObject
         }
     }
 
-    public static Mesh FromGlbStream(GraphicsDevice graphicsDevice, Stream stream)
+    public static Mesh FromGltfStream(GraphicsDevice graphicsDevice, Stream stream)
     {
         var sharpModel = SharpGLTF.Schema2.ModelRoot.ReadGLB(stream);
+
+        // Process materials
+        foreach (SharpGLTF.Schema2.Material material in sharpModel.LogicalMaterials)
+        {
+        }
 
         List<VertexMesh> vertices = new();
         uint[] indices = Array.Empty<uint>();
@@ -130,7 +135,7 @@ public sealed class Mesh : GraphicsObject
                     vertices.Add(new VertexMesh(position, normal, tangent, texcoord));
                 }
 
-              
+
                 // Indices
                 indices = new uint[indexAccessor.Count];
 
