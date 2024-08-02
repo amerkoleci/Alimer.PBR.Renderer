@@ -12,7 +12,7 @@
 
   <PropertyGroup>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <LangVersion>11</LangVersion>
+    <LangVersion>12</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <!-- Local builds should embed PDBs so we never lose them when a subsequent build occurs. -->
@@ -28,8 +28,10 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Authors>Amer Koleci and Contributors</Authors>
-    <Copyright>Copyright © Amer Koleci and Contributors</Copyright>
+    <Authors>Amer Koleci</Authors>
+    <Owners>Amer Koleci</Owners>
+    <Company>Amer Koleci</Company>
+    <Copyright>Copyright (c) Amer Koleci and Contributors</Copyright>
     <Product>Alimer</Product>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>

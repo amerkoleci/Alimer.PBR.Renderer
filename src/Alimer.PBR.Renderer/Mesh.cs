@@ -1,4 +1,4 @@
-﻿// Copyright © Amer Koleci and Contributors.
+// Copyright (c) Amer Koleci and Contributors
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using System.Numerics;
@@ -117,7 +117,11 @@ public sealed class Mesh : GraphicsObject
 
                 if (!hasTangent)
                 {
-                    Span<Vector4> tangents = VertexHelper.GenerateTangents(positionAccessor.ToArray(), texcoordAccessor.ToArray(), indexAccessor.ToArray());
+                    Span<Vector4> tangents = new Vector4[positionAccessor.Count];
+                    VertexHelper.GenerateTangents(tangents,
+                        positionAccessor.ToArray(),
+                        texcoordAccessor.ToArray(),
+                        indexAccessor.ToArray());
                     tangentAccessor = new List<Vector3>();
                     for (int i = 0; i < positionAccessor.Count; ++i)
                     {
@@ -129,7 +133,7 @@ public sealed class Mesh : GraphicsObject
                 {
                     Vector3 position = positionAccessor[i];
                     Vector3 normal = normalAccessor[i];
-                    Vector3 tangent = hasTangent ? tangentAccessor[i]! : Vector3.Zero;
+                    Vector3 tangent = tangentAccessor[i]!;
                     Vector2 texcoord = texcoordAccessor[i];
 
                     vertices.Add(new VertexMesh(position, normal, tangent, texcoord));

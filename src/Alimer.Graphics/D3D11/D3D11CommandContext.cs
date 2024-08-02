@@ -1,4 +1,4 @@
-﻿// Copyright © Amer Koleci and Contributors.
+﻿// Copyright (c) Amer Koleci and Contributors
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using Vortice.Mathematics;
@@ -9,7 +9,6 @@ using static Win32.Graphics.Direct3D11.Apis;
 using System.Runtime.CompilerServices;
 using CommunityToolkit.Diagnostics;
 using Win32;
-using System.Drawing;
 
 namespace Alimer.Graphics.D3D11;
 
@@ -86,7 +85,7 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
     {
         uint numRTVs = 0;
         DSV = default;
-        Size renderArea = new(int.MaxValue, int.MaxValue);
+        SizeI renderArea = new(int.MaxValue, int.MaxValue);
 
         if (!string.IsNullOrEmpty(renderPass.Label))
         {

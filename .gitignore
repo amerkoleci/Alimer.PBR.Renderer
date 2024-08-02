@@ -1,28 +1,51 @@
-###############################################################################
-# Build Artifacts
-###############################################################################
-artifacts/
-*.binlog
+# Prerequisites
+*.d
 
-###############################################################################
-# Default Artifacts
-###############################################################################
-bin/
-obj/
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
 
-###############################################################################
-# Test Artifacts
-###############################################################################
-TestResult.xml
+# Precompiled Headers
+*.gch
+*.pch
 
-###############################################################################
-# Visual Studio and Visual Studio Code
-###############################################################################
-.vs/
-.vscode/
+# Fortran module files
+*.mod
+*.smod
 
-###############################################################################
-# User Specific Settings
-###############################################################################
-*.user
-launchSettings.json
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+*.dmp
+
+# NuGet Packages
+*.nupkg
+*.nuget.g.props
+*.nuget.g.targets
+*.nuget.cache
+**/packages/*
+project.lock.json
+project.assets.json
+*.nuget.dgspec.json
+
+# Others
+*.Cache
+
+# Compiled shaders
+*.cso
+*.spv
+
+# Build dir
+.vs
+[Bb]in/
+[Oo]bj/
+src/native/build

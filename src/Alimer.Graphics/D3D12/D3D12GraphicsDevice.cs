@@ -64,18 +64,18 @@ internal sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
     public D3D12GraphicsDevice(in nint window, bool isFullscreen, TextureSampleCount maxSamples = TextureSampleCount.Count4)
         : base(GraphicsBackend.Direct3D12, window, isFullscreen)
     {
-        uint dxgiFactoryFlags = 0u;
+        bool debugFactory = false;
 
 #if DEBUG
-        using ComPtr<ID3D12Debug1> d3d12Debug1 = default;
-        if (D3D12GetDebugInterface(__uuidof<ID3D12Debug1>(), d3d12Debug1.GetVoidAddressOf()).Success)
         {
-            d3d12Debug1.Get()->EnableDebugLayer();
+            using ComPtr<ID3D12Debug1> d3d12Debug1 = default;
+            if (D3D12GetDebugInterface(__uuidof<ID3D12Debug1>(), d3d12Debug1.GetVoidAddressOf()).Success)
+            {
+                d3d12Debug1.Get()->EnableDebugLayer();
 
-            dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
-        }
+                debugFactory = true;
+            }
 
-        {
             using ComPtr<IDXGIInfoQueue> dxgiInfoQueue = default;
             if (DXGIGetDebugInterface1(0, __uuidof<IDXGIInfoQueue>(), (void**)dxgiInfoQueue.GetAddressOf()).Success)
             {
@@ -85,7 +85,9 @@ internal sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
         }
 #endif
 
-        HResult hr = CreateDXGIFactory2(dxgiFactoryFlags, __uuidof<IDXGIFactory4>(), _dxgiFactory.GetVoidAddressOf());
+        ThrowIfFailed(
+            CreateDXGIFactory2(debugFactory, __uuidof<IDXGIFactory4>(), _dxgiFactory.GetVoidAddressOf())
+            );
 
         {
             using ComPtr<IDXGIFactory5> factory5 = default;
@@ -143,7 +145,7 @@ internal sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
         }
 
         // Create the DX12 API device object.
-        hr = D3D12CreateDevice(
+        HResult hr = D3D12CreateDevice(
             (IUnknown*)adapter.Get(),
             s_minFeatureLevel,
             __uuidof<ID3D12Device>(),

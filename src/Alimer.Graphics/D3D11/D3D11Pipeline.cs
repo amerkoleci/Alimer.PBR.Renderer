@@ -1,4 +1,4 @@
-﻿// Copyright © Amer Koleci and Contributors.
+﻿// Copyright (c) Amer Koleci and Contributors
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using Win32;
@@ -61,7 +61,7 @@ internal sealed unsafe class D3D11Pipeline : Pipeline
 
                     d3d11InputElementDescs[d3d11InputElementIndex] = new InputElementDescription
                     {
-                        SemanticName = (sbyte*)UnsafeUtilities.GetPointer(semanticName),
+                        SemanticName = UnsafeUtilities.GetPointer(semanticName),
                         SemanticIndex = (uint)i,
                         Format = attribute.Format.ToDxgiFormat(),
                         InputSlot = slot,

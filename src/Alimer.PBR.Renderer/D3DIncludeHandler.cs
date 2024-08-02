@@ -1,4 +1,4 @@
-﻿// Copyright © Amer Koleci and Contributors.
+﻿// Copyright (c) Amer Koleci and Contributors
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using System.Runtime.CompilerServices;
@@ -25,7 +25,7 @@ internal unsafe struct D3DIncludeHandler : D3DIncludeHandler.Interface
     {
         void** lpVtbl = (void**)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(D3DIncludeHandler), sizeof(void*) * 2);
 
-        lpVtbl[0] = (delegate* unmanaged<D3DIncludeHandler*, IncludeType, sbyte*, void*, void**, uint*, int>)&Open;
+        lpVtbl[0] = (delegate* unmanaged<D3DIncludeHandler*, IncludeType, byte*, void*, void**, uint*, int>)&Open;
         lpVtbl[1] = (delegate* unmanaged<D3DIncludeHandler*, void*, int>)&Close;
 
         return lpVtbl;
@@ -39,9 +39,9 @@ internal unsafe struct D3DIncludeHandler : D3DIncludeHandler.Interface
     /// <inheritdoc cref="ID3DInclude.Open"/>
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
     //[VtblIndex(0)]
-    public HResult Open(IncludeType IncludeType, sbyte* pFileName, void* pParentData, void** ppData, uint* pBytes)
+    public HResult Open(IncludeType IncludeType, byte* pFileName, void* pParentData, void** ppData, uint* pBytes)
     {
-        return ((delegate* unmanaged[Stdcall]<D3DIncludeHandler*, IncludeType, sbyte*, void*, void**, uint*, int>)(lpVtbl[0]))((D3DIncludeHandler*)Unsafe.AsPointer(ref this), IncludeType, pFileName, pParentData, ppData, pBytes);
+        return ((delegate* unmanaged<D3DIncludeHandler*, IncludeType, byte*, void*, void**, uint*, int>)(lpVtbl[0]))((D3DIncludeHandler*)Unsafe.AsPointer(ref this), IncludeType, pFileName, pParentData, ppData, pBytes);
     }
 
     /// <inheritdoc cref="ID3DInclude.Close"/>
@@ -67,9 +67,9 @@ internal unsafe struct D3DIncludeHandler : D3DIncludeHandler.Interface
 
     /// <inheritdoc cref="ID3DInclude.Open"/>
     [UnmanagedCallersOnly]
-    public static int Open(D3DIncludeHandler* @this, IncludeType IncludeType, sbyte* pFileName, void* pParentData, void** ppData, uint* pBytes)
+    public static int Open(D3DIncludeHandler* @this, IncludeType IncludeType, byte* pFileName, void* pParentData, void** ppData, uint* pBytes)
     {
-        string fileName = new(pFileName);
+        string fileName = StringUtilities.GetString(pFileName)!;
 
         string fullPath = Path.Combine(AppContext.BaseDirectory, fileName);
         if (!string.IsNullOrEmpty(IncludeDirectory))

@@ -1,7 +1,6 @@
 ﻿// Copyright © Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
-using System.Drawing;
 using CommunityToolkit.Diagnostics;
 using Vortice.Mathematics;
 using Win32;
@@ -192,7 +191,7 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
     {
         uint numRTVs = 0;
         //DSV = default;
-        Size renderArea = new(int.MaxValue, int.MaxValue);
+        SizeI renderArea = new(int.MaxValue, int.MaxValue);
 
         if (!string.IsNullOrEmpty(renderPass.Label))
         {

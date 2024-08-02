@@ -1,4 +1,4 @@
-﻿// Copyright © Amer Koleci and Contributors.
+// Copyright © Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using System.Runtime.InteropServices;
@@ -29,12 +29,14 @@ public abstract class GraphicsDevice : GraphicsObject
     public abstract Texture ColorTexture { get; }
     public abstract TextureSampleCount SampleCount { get; }
 
-    public static GraphicsDevice CreateDefault(GraphicsBackend graphicsBackend, in nint window, bool isFullscreen, TextureSampleCount maxSamples = TextureSampleCount.Count4)
+    public static GraphicsDevice CreateDefault(GraphicsBackend graphicsBackend,
+        nint contextHandle, nint windowHandle,
+        bool isFullscreen, TextureSampleCount maxSamples = TextureSampleCount.Count4)
     {
         if (graphicsBackend == GraphicsBackend.Direct3D12)
-            return new D3D12.D3D12GraphicsDevice(window, isFullscreen, maxSamples);
+            return new D3D12.D3D12GraphicsDevice(windowHandle, isFullscreen, maxSamples);
 
-        return new D3D11.D3D11GraphicsDevice(window, isFullscreen, maxSamples);
+        return new D3D11.D3D11GraphicsDevice(windowHandle, isFullscreen, maxSamples);
     }
 
     public abstract bool BeginFrame();

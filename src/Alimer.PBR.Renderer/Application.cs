@@ -1,8 +1,7 @@
-﻿// Copyright © Amer Koleci and Contributors.
+// Copyright (c) Amer Koleci and Contributors
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using System.Diagnostics.CodeAnalysis;
-using System.Drawing;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -11,8 +10,6 @@ using CommunityToolkit.Diagnostics;
 using SDL;
 using Vortice.Mathematics;
 using static SDL.SDL;
-using static SDL.SDL_EventType;
-using static SDL.SDL_InitFlags;
 using Win32.Graphics.Direct3D.Fxc;
 using static Win32.Graphics.Direct3D.Fxc.Apis;
 using System.Text;
@@ -76,7 +73,7 @@ public sealed class Application : GraphicsObject
     private readonly ConstantBuffer<PerViewData> _perViewData;
     private readonly ConstantBuffer<ShadingCB> _shadingCB;
 
-    public Size Size { get; private set; }
+    public SizeI Size { get; private set; }
 
     public unsafe Application(GraphicsBackend graphicsBackend, int width = 1024, int height = 800, TextureSampleCount maxSamples = TextureSampleCount.Count16)
     {
@@ -84,28 +81,51 @@ public sealed class Application : GraphicsObject
         //Log.Info($"SDL v{version.major}.{version.minor}.{version.patch}");
 
         // Init SDL
-        if (SDL_Init(SDL_INIT_TIMER | SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)
+        if (SDL_Init(SDL_InitFlags.Timer | SDL_InitFlags.Video | SDL_InitFlags.Events) != 0)
         {
-            var error = SDL_GetError();
+            string error = SDL_GetErrorString();
             throw new Exception($"Failed to start SDL2: {error}");
         }
 
         SDL_WindowFlags flags = SDL_WindowFlags.Hidden | SDL_WindowFlags.Resizable;
 
-        _window = SDL_CreateWindowWithPosition("Physically Based Rendering (Direct3D 11)",
-            SDL_WINDOWPOS_CENTERED,
-            SDL_WINDOWPOS_CENTERED,
-            width, height, flags);
+        _window = SDL_CreateWindow($"Physically Based Rendering ({graphicsBackend})", width, height, flags);
+        SDL_SetWindowPosition(_window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
 
-        Size = new Size(width, height);
-
-        SDL_SysWMinfo info = new();
-        SDL_GetWindowWMInfo(_window, &info);
-        Guard.IsTrue(info.subsystem == SDL_SYSWM_TYPE.SDL_SYSWM_WINDOWS);
+        Size = new(width, height);
 
         bool isFullscreen = (SDL_GetWindowFlags(_window) & SDL_WindowFlags.Fullscreen) != 0;
 
-        _graphicsDevice = GraphicsDevice.CreateDefault(graphicsBackend, info.info.win.window, isFullscreen, maxSamples);
+        // Native handle
+        nint contextHandle = 0;
+        nint windowHandle = 0;
+        if (OperatingSystem.IsWindows())
+        {
+            windowHandle = SDL_GetProperty(SDL_GetWindowProperties(_window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, IntPtr.Zero);
+        }
+        else if (OperatingSystem.IsMacOS() || OperatingSystem.IsMacCatalyst())
+        {
+            // the (__unsafe_unretained) NSWindow associated with the window
+            windowHandle = SDL_GetProperty(SDL_GetWindowProperties(_window), SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, IntPtr.Zero);
+        }
+        else if (OperatingSystem.IsLinux())
+        {
+            if (SDL_GetCurrentVideoDriverString() == "wayland")
+            {
+                // Wayland
+                contextHandle = SDL_GetProperty(SDL_GetWindowProperties(_window), SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, IntPtr.Zero);
+                windowHandle = SDL_GetProperty(SDL_GetWindowProperties(_window), SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, IntPtr.Zero);
+            }
+            else
+            {
+                // X11
+                contextHandle = SDL_GetProperty(SDL_GetWindowProperties(_window), SDL_PROP_WINDOW_X11_DISPLAY_POINTER, IntPtr.Zero);
+                windowHandle = new IntPtr(SDL_GetNumberProperty(SDL_GetWindowProperties(_window), SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0));
+            }
+
+        }
+
+        _graphicsDevice = GraphicsDevice.CreateDefault(graphicsBackend, contextHandle, windowHandle, isFullscreen, maxSamples);
         _viewSettings = new(0.0f, 0.0f, 150.0f, 45.0f);
 
         _lights[0].Direction = Vector3.Normalize(new Vector3(-1.0f, 0.0f, 0.0f));
@@ -170,8 +190,8 @@ public sealed class Application : GraphicsObject
         _perViewData = AddDisposable(new ConstantBuffer<PerViewData>(_graphicsDevice, "PerView"));
         _shadingCB = AddDisposable(new ConstantBuffer<ShadingCB>(_graphicsDevice, "Shading"));
 
-        _pbrMesh = AddDisposable(MeshFromGltf("DamagedHelmet.glb"));
-        //_pbrMesh = AddDisposable(MeshFromFile("cerberus.fbx"));
+        //_pbrMesh = AddDisposable(MeshFromGltf("DamagedHelmet.glb"));
+        _pbrMesh = AddDisposable(MeshFromFile("cerberus.fbx"));
         _albedoTexture = AddDisposable(CreateTexture(ImageFromFile("cerberus_A.png"), TextureFormat.Rgba8UnormSrgb));
         _normalTexture = AddDisposable(CreateTexture(ImageFromFile("cerberus_N.png"), TextureFormat.Rgba8Unorm));
         _metalnessTexture = AddDisposable(CreateTexture(ImageFromFile("cerberus_M.png", 1), TextureFormat.R8Unorm));
@@ -378,11 +398,11 @@ public sealed class Application : GraphicsObject
             HResult hr = D3DCompile(
                 pSrcData: sourcePtr,
                 SrcDataSize: (nuint)shaderSourceUtf8.Length,
-                pSourceName: string.IsNullOrEmpty(sourceName) ? (sbyte*)sourceNamePtr : null,
+                pSourceName: string.IsNullOrEmpty(sourceName) ? sourceNamePtr : null,
                 pDefines: null,
                 pInclude: (ID3DInclude*)s_D3DIncludeHandler,
-                pEntrypoint: (sbyte*)entryPointPtr,
-                pTarget: (sbyte*)targetPtr,
+                pEntrypoint: entryPointPtr,
+                pTarget: targetPtr,
                 Flags1: shaderFlags,
                 Flags2: 0u,
                 ppCode: d3dBlobBytecode.GetAddressOf(),
@@ -590,7 +610,7 @@ public sealed class Application : GraphicsObject
 
         do
         {
-            eventsRead = SDL_PeepEvents(_events, _eventsPerPeep, SDL_eventaction.SDL_GETEVENT, SDL_EventType.SDL_FIRSTEVENT, SDL_EventType.SDL_EVENT_LAST);
+            eventsRead = SDL_PeepEvents(_events, _eventsPerPeep, SDL_EventAction.GetEvent, SDL_EventType.First, SDL_EventType.Last);
             for (int i = 0; i < eventsRead; i++)
             {
                 HandleSDLEvent(_events[i]);
@@ -602,16 +622,16 @@ public sealed class Application : GraphicsObject
     {
         switch (evt.type)
         {
-            case SDL_QUIT:
-            case SDL_EVENT_TERMINATING:
+            case SDL_EventType.Quit:
+            case SDL_EventType.Terminating:
                 _exitRequested = true;
                 break;
 
-            case SDL_EVENT_MOUSE_WHEEL:
+            case SDL_EventType.MouseWheel:
                 _viewSettings.Distance += ZoomSpeed * -evt.wheel.y;
                 break;
 
-            case  SDL_EVENT_MOUSE_BUTTON_DOWN:
+            case SDL_EventType.MouseButtonDown:
                 if (_mode == InputMode.None)
                 {
                     if (evt.button.button == 1)
@@ -621,19 +641,19 @@ public sealed class Application : GraphicsObject
 
                     _prevCursorX = evt.button.x;
                     _prevCursorY = evt.button.y;
-                    SDL_ShowCursor(0);
+                    SDL_HideCursor();
                 }
                 break;
 
-            case SDL_EVENT_MOUSE_BUTTON_UP:
+            case SDL_EventType.MouseButtonUp:
                 if (evt.button.button == 1)
                     _mode = InputMode.None;
                 if (evt.button.button == 3)
                     _mode = InputMode.None;
-                SDL_ShowCursor(1);
+                SDL_ShowCursor();
                 break;
 
-            case SDL_EVENT_MOUSE_MOTION:
+            case SDL_EventType.MouseMotion:
                 if (_mode != InputMode.None)
                 {
                     float dx = evt.button.x - _prevCursorX;
@@ -656,31 +676,30 @@ public sealed class Application : GraphicsObject
                 }
                 break;
 
-            case SDL_EVENT_KEY_DOWN:
-                if (evt.key.keysym.sym == SDL_Keycode.SDLK_F1)
+            case SDL_EventType.KeyDown:
+                if (evt.key.keysym.sym == SDLK_F1)
                 {
                     _lights[0].Enabled = !_lights[0].Enabled;
                 }
-                else if (evt.key.keysym.sym == SDL_Keycode.SDLK_F2)
+                else if (evt.key.keysym.sym == SDLK_F2)
                 {
                     _lights[1].Enabled = !_lights[1].Enabled;
                 }
-                else if (evt.key.keysym.sym == SDL_Keycode.SDLK_F3)
+                else if (evt.key.keysym.sym == SDLK_F3)
                 {
                     _lights[2].Enabled = !_lights[2].Enabled;
                 }
                 break;
 
-            case SDL_EVENT_KEY_UP:
+            case SDL_EventType.KeyUp:
                 break;
 
             default:
-                if (evt.type >= SDL_EVENT_WINDOW_FIRST && evt.type <= SDL_EVENT_WINDOW_LAST)
+                if (evt.type >= SDL_EventType.WindowFirst && evt.type <= SDL_EventType.WindowLast)
                 {
                     HandleWindowEvent(evt);
                 }
                 break;
-
         }
     }
 

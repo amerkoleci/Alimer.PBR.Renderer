@@ -1,4 +1,4 @@
-﻿// Copyright © Amer Koleci and Contributors.
+// Copyright (c) Amer Koleci and Contributors
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using System.Numerics;
@@ -8,15 +8,14 @@ namespace Alimer.PBR.Renderer;
 
 public static class VertexHelper
 {
-    public static Span<Vector4> GenerateTangents(
-        Span<Vector3> positions,
-        Span<Vector2> texcoords,
-        Span<uint> indices)
+    public static unsafe void GenerateTangents(
+        Span<Vector4> tangents,
+        ReadOnlySpan<Vector3> positions,
+        ReadOnlySpan<Vector2> texcoords,
+        ReadOnlySpan<uint> indices)
     {
-        Span<Vector4> tangentBuffer = new Vector4[positions.Length];
-
         int indexCount = indices.IsEmpty
-            ? positions.Length / Unsafe.SizeOf<Vector3>()
+            ? positions.Length / sizeof(Vector3)
             : indices.Length;
 
         for (int i = 0; i < indexCount; i += 3)
@@ -48,7 +47,7 @@ public static class VertexHelper
 
             float dR = uvEdge1.X * uvEdge2.Y - uvEdge2.X * uvEdge1.Y;
 
-            if (Math.Abs(dR) < 1e-6f)
+            if (MathF.Abs(dR) < 1e-6f)
             {
                 dR = 1.0f;
             }
@@ -56,17 +55,15 @@ public static class VertexHelper
             float r = 1.0f / dR;
             Vector3 t = (uvEdge2.Y * edge1 - uvEdge1.Y * edge2) * r;
 
-            tangentBuffer[index1] += new Vector4(t, 0.0f);
-            tangentBuffer[index2] += new Vector4(t, 0.0f);
-            tangentBuffer[index3] += new Vector4(t, 0.0f);
+            tangents[index1] += new Vector4(t, 0.0f);
+            tangents[index2] += new Vector4(t, 0.0f);
+            tangents[index3] += new Vector4(t, 0.0f);
         }
 
-        for (int i = 0; i < tangentBuffer.Length; i++)
+        for (int i = 0; i < tangents.Length; i++)
         {
-            tangentBuffer[i].W = 1.0f;
+            tangents[i].W = 1.0f;
         }
-
-        return tangentBuffer;
     }
 }
 
