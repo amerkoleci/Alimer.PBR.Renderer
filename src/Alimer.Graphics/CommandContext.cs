@@ -1,8 +1,10 @@
-﻿// Copyright © Amer Koleci and Contributors.
+﻿// Copyright (c) Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
+using System.Text;
 using CommunityToolkit.Diagnostics;
 using Vortice.Mathematics;
+using XenoAtom.Interop;
 
 namespace Alimer.Graphics;
 
@@ -16,7 +18,16 @@ public abstract class CommandContext : GraphicsObject
     /// <param name="waitForCompletion"></param>
     public abstract void Flush(bool waitForCompletion = false);
 
-    public abstract void PushDebugGroup(string groupLabel);
+    public void PushDebugGroup(string groupLabel, in Color4 color = default)
+    {
+        int utf8Count = Encoding.UTF8.GetByteCount(groupLabel);
+        Span<byte> utf8Buffer = stackalloc byte[utf8Count + 1];
+        Encoding.UTF8.GetBytes(groupLabel, utf8Buffer);
+        utf8Buffer[utf8Count] = 0;
+        PushDebugGroup((ReadOnlySpan<byte>)utf8Buffer, color);
+    }
+
+    public abstract void PushDebugGroup(ReadOnlySpanUtf8 groupLabel, in Color4 color = default);
     public abstract void PopDebugGroup();
     public abstract void InsertDebugMarker(string debugLabel);
 
@@ -26,7 +37,7 @@ public abstract class CommandContext : GraphicsObject
         return new(this);
     }
 
-    public void BeginRenderPass(in RenderPassDescriptor renderPass)
+    public void BeginRenderPass(in RenderPassDescription renderPass)
     {
         Guard.IsFalse(_insideRenderPass);
 
@@ -42,7 +53,7 @@ public abstract class CommandContext : GraphicsObject
         _insideRenderPass = false;
     }
 
-    public ScopedRenderPass PushScopedPassPass(in RenderPassDescriptor renderPass)
+    public ScopedRenderPass PushScopedPassPass(in RenderPassDescription renderPass)
     {
         BeginRenderPass(renderPass);
         return new(this);
@@ -117,7 +128,7 @@ public abstract class CommandContext : GraphicsObject
     /// <param name="firstInstance"></param>
     public abstract void DrawIndexed(int indexCount, int instanceCount = 1, int firstIndex = 0, int baseVertex = 0, int firstInstance = 0);
 
-    protected abstract void BeginRenderPassCore(in RenderPassDescriptor descriptor);
+    protected abstract void BeginRenderPassCore(in RenderPassDescription descriptor);
     protected abstract void EndRenderPassCore();
 
     #region Nested

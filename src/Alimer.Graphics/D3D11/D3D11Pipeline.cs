@@ -25,7 +25,7 @@ internal sealed unsafe class D3D11Pipeline : Pipeline
     public D3D11Pipeline(D3D11GraphicsDevice device, in ComputePipelineDescription description)
         : base(device, description)
     {
-        if (device.NativeDevice->CreateComputeShader(description.ComputeShader.Span, null, _cs.GetAddressOf()).Failure)
+        if (device.NativeDevice->CreateComputeShader(description.ComputeShader, null, _cs.GetAddressOf()).Failure)
         {
             throw new InvalidOperationException("Failed to create compute shader from compiled bytecode");
         }
@@ -34,12 +34,12 @@ internal sealed unsafe class D3D11Pipeline : Pipeline
     public D3D11Pipeline(D3D11GraphicsDevice device, in RenderPipelineDescription description)
         : base(device, description)
     {
-        if (device.NativeDevice->CreateVertexShader(description.VertexShader.Span, null, _vs.GetAddressOf()).Failure)
+        if (device.NativeDevice->CreateVertexShader(description.VertexShader, null, _vs.GetAddressOf()).Failure)
         {
             throw new InvalidOperationException("Failed to create vertex shader from compiled bytecode");
         }
 
-        if (device.NativeDevice->CreatePixelShader(description.FragmentShader.Span, null, _ps.GetAddressOf()).Failure)
+        if (device.NativeDevice->CreatePixelShader(description.FragmentShader, null, _ps.GetAddressOf()).Failure)
         {
             throw new InvalidOperationException("Failed to create pixel shader from compiled bytecode");
         }
@@ -87,7 +87,7 @@ internal sealed unsafe class D3D11Pipeline : Pipeline
 
             ThrowIfFailed(device.NativeDevice->CreateInputLayout(
                 d3d11InputElementDescs, (uint)d3d11InputElementIndex,
-                description.VertexShader.Span,
+                description.VertexShader,
                 _inputLayout.GetAddressOf())
             );
         }
@@ -157,8 +157,6 @@ internal sealed unsafe class D3D11Pipeline : Pipeline
 
     protected override void Dispose(bool disposing)
     {
-        base.Dispose(disposing);
-
         if (disposing)
         {
             _cs.Dispose();

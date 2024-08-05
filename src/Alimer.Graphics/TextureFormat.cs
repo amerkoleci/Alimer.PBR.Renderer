@@ -1,4 +1,4 @@
-﻿// Copyright © Amer Koleci and Contributors.
+// Copyright (c) Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 namespace Alimer.Graphics;
@@ -42,10 +42,10 @@ public enum TextureFormat
     Bgra8Unorm,
     Bgra8UnormSrgb,
     // Packed 32-Bit Pixel Formats
-    Rgb9e5Ufloat,
-    Rgb10a2Unorm,
-    Rgb10a2Uint,
-    Rg11b10Float,
+    RGB10A2Uint,
+    RGB10A2Unorm,
+    RG11B10Ufloat,
+    RGB9E5Ufloat,
     // 64-bit formats
     Rg32Uint,
     Rg32Sint,

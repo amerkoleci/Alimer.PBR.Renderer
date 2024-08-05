@@ -5,6 +5,7 @@ using CommunityToolkit.Diagnostics;
 using Vortice.Mathematics;
 using Win32;
 using Win32.Graphics.Direct3D12;
+using XenoAtom.Interop;
 using static Win32.Apis;
 using static Win32.Graphics.Direct3D12.Apis;
 using D3DPrimitiveTopology = Win32.Graphics.Direct3D.PrimitiveTopology;
@@ -30,7 +31,7 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
     private D3D12Pipeline? _currentPipeline;
     private D3DPrimitiveTopology _currentPrimitiveTopology;
 
-    private RenderPassDescriptor _currentRenderPass;
+    private RenderPassDescription _currentRenderPass;
     private readonly CpuDescriptorHandle[] _rtvs = new CpuDescriptorHandle[D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT];
     //private ID3D11DepthStencilView* DSV = null;
     //private readonly ID3D11Buffer*[] _vertexBindings = new ID3D11Buffer*[8];
@@ -61,8 +62,6 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
 
     protected override void Dispose(bool disposing)
     {
-        base.Dispose(disposing);
-
         if (disposing)
         {
             for (int i = 0; i < GraphicsDevice.NumFramesInFlight; i++)
@@ -164,13 +163,13 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
         Reset();
     }
 
-    public override void PushDebugGroup(string groupLabel)
+    public override void PushDebugGroup(ReadOnlySpanUtf8 groupLabel, in Color4 color = default)
     {
         // TODO: Use Pix3 (WinPixEventRuntime)
 
         int bufferSize = PixHelpers.CalculateNoArgsEventSize(groupLabel);
         void* buffer = stackalloc byte[bufferSize];
-        PixHelpers.FormatNoArgsEventToBuffer(buffer, PixHelpers.PixEventType.PIXEvent_BeginEvent_NoArgs, 0, groupLabel);
+        PixHelpers.FormatNoArgsEventToBuffer(buffer, PixHelpers.PixEventType.PIXEvent_BeginEvent_NoArgs, 0, groupLabel.ToString()!);
         _commandList.Get()->BeginEvent(PixHelpers.WinPIXEventPIX3BlobVersion, buffer, (uint)bufferSize);
     }
 
@@ -187,13 +186,13 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
         _commandList.Get()->SetMarker(PixHelpers.WinPIXEventPIX3BlobVersion, buffer, (uint)bufferSize);
     }
 
-    protected override void BeginRenderPassCore(in RenderPassDescriptor renderPass)
+    protected override void BeginRenderPassCore(in RenderPassDescription renderPass)
     {
         uint numRTVs = 0;
         //DSV = default;
         SizeI renderArea = new(int.MaxValue, int.MaxValue);
 
-        if (!string.IsNullOrEmpty(renderPass.Label))
+        if (!renderPass.Label.IsNull)
         {
             PushDebugGroup(renderPass.Label);
         }
@@ -224,7 +223,7 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
                         Color4 clearColorValue = attachment.ClearColor;
                         _commandList.Get()->ClearRenderTargetView(_rtvs[numRTVs], (float*)&clearColorValue, NumRects: 0, pRects: null);
                         break;
-                    case LoadAction.DontCare:
+                    case LoadAction.Discard:
                         //_commandList.Get()->DiscardResource((ID3D11View*)_rtvs[numRTVs]);
                         break;
                 }
@@ -343,7 +342,7 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
 
                         break;
 
-                    case StoreAction.DontCare:
+                    case StoreAction.Discard:
                         //_commandList.Get()->DiscardView((ID3D11View*)_rtvs[index]);
                         break;
                 }
@@ -390,7 +389,7 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
         _context->OMSetRenderTargets(0, null, null); 
 #endif
 
-        if (!string.IsNullOrEmpty(_currentRenderPass.Label))
+        if (!_currentRenderPass.Label.IsNull)
         {
             PopDebugGroup();
         }

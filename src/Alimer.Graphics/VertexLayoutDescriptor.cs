@@ -1,11 +1,10 @@
-﻿// Copyright © Amer Koleci and Contributors.
+﻿// Copyright (c) Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 namespace Alimer.Graphics;
 
 public readonly record struct VertexLayoutDescriptor
 {
-
     public VertexLayoutDescriptor(params VertexAttributeDescriptor[] attributes)
     {
         Attributes = attributes;

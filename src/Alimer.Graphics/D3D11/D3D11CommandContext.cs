@@ -9,6 +9,8 @@ using static Win32.Graphics.Direct3D11.Apis;
 using System.Runtime.CompilerServices;
 using CommunityToolkit.Diagnostics;
 using Win32;
+using XenoAtom.Interop;
+using System.Text;
 
 namespace Alimer.Graphics.D3D11;
 
@@ -24,7 +26,7 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
     private ID3D11DepthStencilState* _currentDepthStencilState;
     private D3DPrimitiveTopology _currentPrimitiveTopology;
 
-    private RenderPassDescriptor _currentRenderPass;
+    private RenderPassDescription _currentRenderPass;
     private readonly ID3D11RenderTargetView*[] _rtvs = new ID3D11RenderTargetView*[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT];
     private ID3D11DepthStencilView* DSV = null;
 
@@ -49,8 +51,6 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
 
     protected override void Dispose(bool disposing)
     {
-        base.Dispose(disposing);
-
         if (disposing)
         {
             _annotation.Dispose();
@@ -66,9 +66,14 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
     }
 
 
-    public override void PushDebugGroup(string groupLabel)
+    public override void PushDebugGroup(ReadOnlySpanUtf8 name, in Color4 color = default)
     {
-        _annotation.Get()->BeginEvent(groupLabel);
+        string? nameStr = name.ToString();
+        if (!string.IsNullOrEmpty(nameStr))
+        {
+            fixed (char* namePtr = nameStr)
+                _annotation.Get()->BeginEvent(namePtr);
+        }
     }
 
     public override void PopDebugGroup()
@@ -81,13 +86,13 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
         _annotation.Get()->SetMarker(debugLabel);
     }
 
-    protected override void BeginRenderPassCore(in RenderPassDescriptor renderPass)
+    protected override void BeginRenderPassCore(in RenderPassDescription renderPass)
     {
         uint numRTVs = 0;
         DSV = default;
         SizeI renderArea = new(int.MaxValue, int.MaxValue);
 
-        if (!string.IsNullOrEmpty(renderPass.Label))
+        if (!renderPass.Label.IsNull)
         {
             PushDebugGroup(renderPass.Label);
         }
@@ -117,7 +122,7 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
                         Color4 clearColorValue = attachment.ClearColor;
                         _context->ClearRenderTargetView(_rtvs[numRTVs], (float*)&clearColorValue);
                         break;
-                    case LoadAction.DontCare:
+                    case LoadAction.Discard:
                         _context->DiscardView((ID3D11View*)_rtvs[numRTVs]);
                         break;
                 }
@@ -126,10 +131,11 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
             }
         }
 
-        if (renderPass.DepthStencilAttachment.HasValue)
+
+        if (renderPass.DepthStencilAttachment.Texture is not null)
         {
-            RenderPassDepthStencilAttachment attachment = renderPass.DepthStencilAttachment.Value;
-            Guard.IsTrue(attachment.Texture is not null);
+            RenderPassDepthStencilAttachment attachment = renderPass.DepthStencilAttachment;
+            TextureFormat depthStencilFormat = attachment.Texture.Format;
 
             D3D11Texture texture = (D3D11Texture)attachment.Texture;
             int mipLevel = attachment.MipLevel;
@@ -149,7 +155,7 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
                 case LoadAction.Clear:
                     clearFlags |= ClearFlags.Depth;
                     break;
-                case LoadAction.DontCare:
+                case LoadAction.Discard:
                     _context->DiscardView((ID3D11View*)DSV);
                     break;
             }
@@ -164,7 +170,7 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
                     case LoadAction.Clear:
                         clearFlags |= ClearFlags.Stencil;
                         break;
-                    case LoadAction.DontCare:
+                    case LoadAction.Discard:
                         _context->DiscardView((ID3D11View*)DSV);
                         break;
                 }
@@ -215,17 +221,16 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
                         }
                         break;
 
-                    case StoreAction.DontCare:
+                    case StoreAction.Discard:
                         _context->DiscardView((ID3D11View*)_rtvs[index]);
                         break;
                 }
             }
         }
 
-        if (_currentRenderPass.DepthStencilAttachment.HasValue)
+        if (_currentRenderPass.DepthStencilAttachment.Texture is not null)
         {
-            RenderPassDepthStencilAttachment attachment = _currentRenderPass.DepthStencilAttachment.Value;
-            Guard.IsTrue(attachment.Texture is not null);
+            RenderPassDepthStencilAttachment attachment = _currentRenderPass.DepthStencilAttachment;
 
             ClearFlags clearFlags = ClearFlags.None;
             switch (attachment.DepthStoreAction)
@@ -233,7 +238,7 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
                 case StoreAction.Store:
                     break;
 
-                case StoreAction.DontCare:
+                case StoreAction.Discard:
                     _context->DiscardView((ID3D11View*)DSV);
                     break;
             }
@@ -245,7 +250,7 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
                     case StoreAction.Store:
                         break;
 
-                    case StoreAction.DontCare:
+                    case StoreAction.Discard:
                         _context->DiscardView((ID3D11View*)DSV);
                         break;
                 }
@@ -259,7 +264,7 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
 
         _context->OMSetRenderTargets(0, null, null);
 
-        if (!string.IsNullOrEmpty(_currentRenderPass.Label))
+        if (!_currentRenderPass.Label.IsNull)
         {
             PopDebugGroup();
         }

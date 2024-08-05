@@ -75,8 +75,6 @@ internal sealed unsafe class D3D12Buffer : GraphicsBuffer, ID3D11GpuResource
 
     protected override void Dispose(bool disposing)
     {
-        base.Dispose(disposing);
-
         if (disposing)
         {
             ((D3D12GraphicsDevice)Device).DeferDestroy((IUnknown*)_handle.Get());

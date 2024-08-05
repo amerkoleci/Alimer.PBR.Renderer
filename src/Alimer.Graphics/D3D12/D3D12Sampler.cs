@@ -55,8 +55,6 @@ internal sealed unsafe class D3D12Sampler : Sampler
 
     protected override void Dispose(bool disposing)
     {
-        base.Dispose(disposing);
-
         if (disposing)
         {
            // _handle.Dispose();

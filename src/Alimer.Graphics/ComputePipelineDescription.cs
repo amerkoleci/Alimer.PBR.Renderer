@@ -1,17 +1,19 @@
-﻿// Copyright © Amer Koleci and Contributors.
+﻿// Copyright (c) Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
+
+using XenoAtom.Interop;
 
 namespace Alimer.Graphics;
 
 /// <summary>
 /// Structure that describes the <see cref="Pipeline"/>.
 /// </summary>
-public readonly record struct ComputePipelineDescription
+public readonly ref struct ComputePipelineDescription
 {
-    public ReadOnlyMemory<byte> ComputeShader { get; init; }
+    public ReadOnlySpan<byte> ComputeShader { get; init; }
 
     /// <summary>
     /// Gets or sets the label of <see cref="Pipeline"/>.
     /// </summary>
-    public string? Label { get; init; }
+    public ReadOnlyMemoryUtf8 Label { get; init; }
 }

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Amer Koleci and Contributors
+// Copyright (c) Amer Koleci and Contributors
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using System.Drawing;
@@ -22,6 +22,8 @@ internal sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
     private readonly ComPtr<ID3D11Device1> _device;
     private readonly ComPtr<ID3D11DeviceContext1> _context;
     private readonly FeatureLevel _featureLevel = FeatureLevel.Level_9_1;
+
+    private readonly GraphicsDeviceLimits _limits;
     private readonly ComPtr<IDXGISwapChain1> _swapChain;
     private D3D11Texture? _colorTexture;
 
@@ -29,6 +31,9 @@ internal sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
     public TextureFormat ColorFormat { get; } = TextureFormat.Bgra8Unorm;
     public ID3D11Device1* NativeDevice => _device;
     public ID3D11DeviceContext1* NativeContext => _context;
+
+    /// <inheritdoc />
+    public override GraphicsDeviceLimits Limits => _limits;
 
     public override CommandContext DefaultContext { get; }
 
@@ -160,6 +165,20 @@ internal sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
         ThrowIfFailed(tempDevice.CopyTo(_device.GetAddressOf()));
         ThrowIfFailed(tempContext.CopyTo(_context.GetAddressOf()));
 
+        _limits = new GraphicsDeviceLimits
+        {
+            MaxTextureDimension1D = D3D11_REQ_TEXTURE1D_U_DIMENSION,
+            MaxTextureDimension2D = D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION,
+            MaxTextureDimension3D = D3D11_REQ_TEXTURE3D_U_V_OR_W_DIMENSION,
+            MaxTextureDimensionCube = D3D11_REQ_TEXTURECUBE_DIMENSION,
+            MaxTextureArrayLayers = D3D11_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION,
+            MaxBufferSize = D3D11_REQ_RESOURCE_SIZE_IN_MEGABYTES_EXPRESSION_A_TERM * 1024u * 1024u,
+            MinConstantBufferOffsetAlignment = 256, // D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT,
+            MaxConstantBufferBindingSize = D3D11_REQ_IMMEDIATE_CONSTANT_BUFFER_ELEMENT_COUNT * 16,
+            MinStorageBufferOffsetAlignment = D3D11_RAW_UAV_SRV_BYTE_ALIGNMENT,
+            MaxStorageBufferBindingSize = (1u << (int)D3D11_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP) - 1,
+        };
+
         // Determine maximum supported MSAA level.
         uint samples;
         for (samples = (uint)maxSamples; samples > 1; samples /= 2)
@@ -216,8 +235,6 @@ internal sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
     protected override void Dispose(bool disposing)
     {
         _context.Get()->Flush();
-
-        base.Dispose(disposing);
 
         if (disposing)
         {

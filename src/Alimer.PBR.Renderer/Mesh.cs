@@ -1,4 +1,4 @@
-// Copyright (c) Amer Koleci and Contributors
+// Copyright (c) Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using System.Numerics;
@@ -28,21 +28,25 @@ public sealed class Mesh : GraphicsObject
         // | PostProcessSteps.Debone
         ;
 
+    public readonly GraphicsBuffer VertexBuffer;
+    public readonly GraphicsBuffer IndexBuffer;
+    public readonly int IndexCount;
+    public readonly IndexType IndexType;
+
     static Mesh()
     {
         _assImp = Assimp.GetApi();
     }
 
-
     private Mesh(GraphicsDevice graphicsDevice, List<VertexMesh> vertices, uint[] indices)
     {
-        VertexBuffer = AddDisposable(graphicsDevice.CreateBuffer(vertices.ToArray(), BufferUsage.Vertex));
+        VertexBuffer = graphicsDevice.CreateBuffer(vertices.ToArray(), BufferUsage.Vertex);
         IndexCount = indices.Length;
 
         IndexType = vertices.Count > 65536 ? IndexType.Uint32 : IndexType.Uint16;
         if (IndexType == IndexType.Uint32)
         {
-            IndexBuffer = AddDisposable(graphicsDevice.CreateBuffer(indices.ToArray(), BufferUsage.Index));
+            IndexBuffer = graphicsDevice.CreateBuffer(indices.ToArray(), BufferUsage.Index);
         }
         else
         {
@@ -52,14 +56,18 @@ public sealed class Mesh : GraphicsObject
                 shortIndices[i] = (ushort)indices[i];
             }
 
-            IndexBuffer = AddDisposable(graphicsDevice.CreateBuffer(shortIndices, BufferUsage.Index));
+            IndexBuffer = graphicsDevice.CreateBuffer(shortIndices, BufferUsage.Index);
         }
     }
 
-    public readonly GraphicsBuffer VertexBuffer;
-    public readonly GraphicsBuffer IndexBuffer;
-    public readonly int IndexCount;
-    public readonly IndexType IndexType;
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            VertexBuffer.Dispose();
+            IndexBuffer.Dispose();
+        }
+    }
 
     public static Mesh FromFile(GraphicsDevice graphicsDevice, string filePath)
     {

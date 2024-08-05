@@ -1,4 +1,4 @@
-// Copyright (c) Amer Koleci and Contributors
+// Copyright (c) Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using System.Diagnostics.CodeAnalysis;
@@ -27,6 +27,7 @@ public sealed class Application : GraphicsObject
     private const int _eventsPerPeep = 64;
     private static readonly unsafe SDL_Event* _events = (SDL_Event*)NativeMemory.Alloc(_eventsPerPeep, (nuint)sizeof(SDL_Event));
 
+    private readonly List<IDisposable> _disposables = [];
     private readonly GraphicsDevice _graphicsDevice;
     private readonly SDL_Window _window;
     private bool _exitRequested;
@@ -210,14 +211,14 @@ public sealed class Application : GraphicsObject
         {
             VertexShader = CompileShader("skybox.hlsl", "vertexMain", "vs_5_0"),
             FragmentShader = CompileShader("skybox.hlsl", "fragmentMain", "ps_5_0"),
-            VertexDescriptor = new(new VertexLayoutDescriptor((uint)VertexMesh.SizeInBytes, new VertexAttributeDescriptor(VertexFormat.Float32x3, 0))),
+            VertexDescriptor = new(new VertexLayoutDescriptor((uint)VertexMesh.SizeInBytes, new VertexAttributeDescriptor(VertexFormat.Float3, 0))),
             DepthStencilState = DepthStencilState.DepthNone
         };
         _skyboxPipeline = AddDisposable(_graphicsDevice.CreateRenderPipeline(skyboxPipelineDesc));
 
         RenderPipelineDescription tonemapPipelineDesc = new()
         {
-            Label = "Tonemap",
+            Label = "Tonemap"u8,
             VertexShader = CompileShader("tonemap.hlsl", "vertexMain", "vs_5_0"),
             FragmentShader = CompileShader("tonemap.hlsl", "fragmentMain", "ps_5_0"),
             RasterizerState = RasterizerState.CullNone,
@@ -234,7 +235,7 @@ public sealed class Application : GraphicsObject
             ComputePipelineDescription equirectToCubePipelineDesc = new()
             {
                 ComputeShader = CompileShader("equirect2cube.hlsl", "main", "cs_5_0"),
-                Label = "EquirectToCube"
+                Label = "EquirectToCube"u8
             };
 
             using Pipeline equirectToCubePipeline = _graphicsDevice.CreateComputePipeline(equirectToCubePipelineDesc);
@@ -253,7 +254,7 @@ public sealed class Application : GraphicsObject
         {
             ComputePipelineDescription spmapPipelineDesc = new()
             {
-                Label = "Spmap",
+                Label = "Spmap"u8,
                 ComputeShader = CompileShader("spmap.hlsl", "main", "cs_5_0")
             };
 
@@ -294,7 +295,7 @@ public sealed class Application : GraphicsObject
         {
             ComputePipelineDescription irmapPipelineDesc = new()
             {
-                Label = "Irmap",
+                Label = "Irmap"u8,
                 ComputeShader = CompileShader("irmap.hlsl", "main", "cs_5_0")
             };
 
@@ -313,7 +314,7 @@ public sealed class Application : GraphicsObject
         {
             ComputePipelineDescription spBRDFPipelineDesc = new()
             {
-                Label = "spBRDF",
+                Label = "spBRDF"u8,
                 ComputeShader = CompileShader("spbrdf.hlsl", "main", "cs_5_0")
             };
 
@@ -357,7 +358,7 @@ public sealed class Application : GraphicsObject
         return Mesh.FromGltf(_graphicsDevice, Path.Combine(AppContext.BaseDirectory, "assets", "meshes", fileName));
     }
 
-    private static ReadOnlyMemory<byte> CompileShader(string fileName, string entryPoint, string profile)
+    private static ReadOnlySpan<byte> CompileShader(string fileName, string entryPoint, string profile)
     {
         string filePath = Path.Combine(AppContext.BaseDirectory, "assets", "shaders", "hlsl", fileName);
         string shaderSource = File.ReadAllText(filePath);
@@ -367,7 +368,7 @@ public sealed class Application : GraphicsObject
 
     private static unsafe readonly D3DIncludeHandler* s_D3DIncludeHandler = D3DIncludeHandler.Create();
 
-    public static unsafe ReadOnlyMemory<byte> CompileBytecode(string shaderSource, string entryPoint, string profile, string? sourceName = default)
+    public static unsafe ReadOnlySpan<byte> CompileBytecode(string shaderSource, string entryPoint, string profile, string? sourceName = default)
     {
         CompileFlags shaderFlags = CompileFlags.EnableStrictness;
 #if DEBUG
@@ -445,7 +446,13 @@ public sealed class Application : GraphicsObject
 
     protected override void Dispose(bool disposing)
     {
-        base.Dispose(disposing);
+        if (disposing)
+        {
+            for (int i = _disposables.Count - 1; i >= 0; i--)
+            {
+                _disposables[i].Dispose();
+            }
+        }
 
         SDL_DestroyWindow(_window);
         _graphicsDevice.Dispose();
@@ -552,9 +559,9 @@ public sealed class Application : GraphicsObject
             ResolveTexture = (_fboColorTexture != _fboResolveColorTexture) ? _fboResolveColorTexture : _fboColorTexture,
         };
         RenderPassDepthStencilAttachment depthStencilAttachment = new(_fboDepthStencilTexture);
-        RenderPassDescriptor renderPass = new(depthStencilAttachment, colorAttachment)
+        RenderPassDescription renderPass = new(depthStencilAttachment, colorAttachment)
         {
-            Label = "Main Pass"
+            Label = "Main Pass"u8
         };
 
         using (context.PushScopedPassPass(renderPass))
@@ -586,9 +593,9 @@ public sealed class Application : GraphicsObject
         }
 
         // Draw a full screen triangle for postprocessing/tone mapping.
-        RenderPassDescriptor backBufferRenderPass = new(new RenderPassColorAttachment(_graphicsDevice.ColorTexture))
+        RenderPassDescription backBufferRenderPass = new(new RenderPassColorAttachment(_graphicsDevice.ColorTexture))
         {
-            Label = "BackBuffer"
+            Label = "BackBuffer"u8
         };
 
         using (context.PushScopedPassPass(backBufferRenderPass))
@@ -705,6 +712,19 @@ public sealed class Application : GraphicsObject
 
     private void HandleWindowEvent(in SDL_Event evt)
     {
+    }
+
+    /// <summary>
+    /// Adds a disposable object to the list of the objects to dispose.
+    /// </summary>
+    /// <param name="item">To dispose.</param>
+    private T AddDisposable<T>(T objectToDispose)
+        where T : IDisposable
+    {
+        Guard.IsNotNull(objectToDispose);
+
+        _disposables.Add(objectToDispose);
+        return objectToDispose;
     }
 
     private static Matrix4x4 EulerAngleXY(float angleX, float angleY)

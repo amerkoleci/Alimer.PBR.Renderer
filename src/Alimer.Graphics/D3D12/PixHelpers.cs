@@ -2,6 +2,7 @@
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using System.Diagnostics;
+using XenoAtom.Interop;
 
 namespace Alimer.Graphics.D3D12;
 
@@ -31,13 +32,24 @@ internal static unsafe class PixHelpers
         1 /* end marker */) * 8;
 
     /// <summary>
+    /// Calculates the size of the buffer required, in bytes.
+    /// </summary>
+    /// <param name="message"> The text to be embedded in the event. </param>
+    /// <returns> The size of the buffer required, in bytes. </returns>
+    internal static int CalculateNoArgsEventSize(ReadOnlySpanUtf8 message) =>
+        (3 /* start marker, color, copy chunk size */ +
+        message.Length / 4 /* 8 bytes / 2 bytes per character */ +
+        1 /* null terminator */ +
+        1 /* end marker */) * 8;
+
+    /// <summary>
     /// Writes a formatted PIX no-arg event to the given buffer.
     /// </summary>
     /// <param name="outputBuffer"> The buffer to write to. </param>
     /// <param name="eventType"> The PIX event type. </param>
     /// <param name="color"> Either a color index, or an RGB color. </param>
     /// <param name="message"> The message to embed in the buffer. </param>
-    internal static unsafe void FormatNoArgsEventToBuffer(void* outputBuffer, PixEventType eventType, ulong color, ReadOnlySpan<char> message)
+    internal static void FormatNoArgsEventToBuffer(void* outputBuffer, PixEventType eventType, ulong color, ReadOnlySpan<char> message)
     {
         // The buffer is written to in quad-word-sized chunks.
         ulong* buffer = (ulong*)outputBuffer;

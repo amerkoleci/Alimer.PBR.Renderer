@@ -68,8 +68,6 @@ internal sealed unsafe class D3D11Buffer : GraphicsBuffer
 
     protected override void Dispose(bool disposing)
     {
-        base.Dispose(disposing);
-
         if (disposing)
         {
             _handle.Dispose();

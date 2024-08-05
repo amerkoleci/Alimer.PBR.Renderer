@@ -1,4 +1,4 @@
-﻿// Copyright © Amer Koleci and Contributors.
+// Copyright (c) Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 namespace Alimer.Graphics;
@@ -52,10 +52,10 @@ public static class TextureFormatUtils
                 return 4;
 
             // Packed 32-Bit formats
-            case TextureFormat.Rgb9e5Ufloat:
-            case TextureFormat.Rgb10a2Unorm:
-            case TextureFormat.Rgb10a2Uint:
-            case TextureFormat.Rg11b10Float:
+            case TextureFormat.RGB10A2Unorm:
+            case TextureFormat.RGB10A2Uint:
+            case TextureFormat.RG11B10Ufloat:
+            case TextureFormat.RGB9E5Ufloat:
                 return 4;
 
             // 64-Bit formats

@@ -1,12 +1,14 @@
-﻿// Copyright © Amer Koleci and Contributors.
+﻿// Copyright (c) Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
+
+using XenoAtom.Interop;
 
 namespace Alimer.Graphics;
 
 /// <summary>
 /// Structure that describes the <see cref="Pipeline"/>.
 /// </summary>
-public readonly record struct RenderPipelineDescription
+public readonly ref struct RenderPipelineDescription
 {
     public RenderPipelineDescription()
     {
@@ -16,9 +18,9 @@ public readonly record struct RenderPipelineDescription
         PrimitiveTopology = PrimitiveTopology.TriangleList;
     }
 
-    public ReadOnlyMemory<byte> VertexShader { get; init; }
+    public ReadOnlySpan<byte> VertexShader { get; init; }
 
-    public ReadOnlyMemory<byte> FragmentShader { get; init; }
+    public ReadOnlySpan<byte> FragmentShader { get; init; }
 
     public BlendState BlendState { get; init; }
 
@@ -32,5 +34,5 @@ public readonly record struct RenderPipelineDescription
     /// <summary>
     /// Gets or sets the label of <see cref="Pipeline"/>.
     /// </summary>
-    public string? Label { get; init; }
+    public ReadOnlyMemoryUtf8 Label { get; init; }
 }

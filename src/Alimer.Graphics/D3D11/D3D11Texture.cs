@@ -102,8 +102,10 @@ internal sealed unsafe class D3D11Texture : Texture
 
         if ((description.Usage & TextureUsage.ShaderRead) != 0)
         {
-            ShaderResourceViewDescription srvDesc = new();
-            srvDesc.Format = DxgiFormat;
+            ShaderResourceViewDescription srvDesc = new()
+            {
+                Format = DxgiFormat
+            };
             if (description.Dimension == TextureDimension.TextureCube)
             {
                 srvDesc.ViewDimension = SrvDimension.TextureCube;
@@ -117,15 +119,12 @@ internal sealed unsafe class D3D11Texture : Texture
                 srvDesc.Texture2D.MipLevels = 1;
             }
 
-
             ThrowIfFailed(device.NativeDevice->CreateShaderResourceView(Handle, &srvDesc, _srv.GetAddressOf()));
         }
     }
 
     protected override void Dispose(bool disposing)
     {
-        base.Dispose(disposing);
-
         if (disposing)
         {
             foreach (KeyValuePair<int, ComPtr<ID3D11RenderTargetView>> kvp in _rtvs)

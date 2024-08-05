@@ -1,4 +1,4 @@
-// Copyright © Amer Koleci and Contributors.
+// Copyright (c) Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using System.Runtime.InteropServices;
@@ -6,7 +6,7 @@ using CommunityToolkit.Diagnostics;
 
 namespace Alimer.Graphics;
 
-public abstract class GraphicsDevice : GraphicsObject
+public abstract unsafe class GraphicsDevice : GraphicsObject
 {
     public static readonly int NumFramesInFlight = 2;
 
@@ -25,6 +25,11 @@ public abstract class GraphicsDevice : GraphicsObject
     /// </summary>
     public GraphicsBackend Backend { get; }
 
+    /// <summary>
+    /// Get the device limits.
+    /// </summary>
+    public abstract GraphicsDeviceLimits Limits { get; }
+
     public abstract CommandContext DefaultContext { get; }
     public abstract Texture ColorTexture { get; }
     public abstract TextureSampleCount SampleCount { get; }
@@ -42,31 +47,49 @@ public abstract class GraphicsDevice : GraphicsObject
     public abstract bool BeginFrame();
     public abstract void EndFrame();
 
-    public unsafe GraphicsBuffer CreateBuffer(in BufferDescription description)
+    #region CreateBuffer
+    public GraphicsBuffer CreateBuffer(in BufferDescription description)
     {
         return CreateBuffer(description, null);
     }
 
-    public unsafe GraphicsBuffer CreateBuffer(in BufferDescription description, IntPtr initialData)
+    public GraphicsBuffer CreateBuffer(in BufferDescription description, nint initialData)
     {
         return CreateBuffer(description, initialData.ToPointer());
     }
 
-    public unsafe GraphicsBuffer CreateBuffer(in BufferDescription description, void* initialData)
+    public GraphicsBuffer CreateBuffer(in BufferDescription description, void* initialData)
     {
+        Guard.IsTrue(description.Usage != BufferUsage.None, nameof(BufferDescription.Usage));
         Guard.IsGreaterThanOrEqualTo(description.Size, 4, nameof(BufferDescription.Size));
+        Guard.IsLessThanOrEqualTo(description.Size, Limits.MaxBufferSize, nameof(BufferDescription.Size));
 
         return CreateBufferCore(description, initialData);
     }
 
-    public unsafe GraphicsBuffer CreateBuffer<T>(in BufferDescription description, ref T initialData) where T : unmanaged
+    public GraphicsBuffer CreateBuffer<T>(in BufferDescription description, ref T initialData) where T : unmanaged
     {
-        Guard.IsGreaterThanOrEqualTo(description.Size, 4, nameof(BufferDescription.Size));
-
-        fixed (void* initialDataPtr = &initialData)
-        {
+        fixed (T* initialDataPtr = &initialData)
             return CreateBuffer(description, initialDataPtr);
-        }
+    }
+
+    public GraphicsBuffer CreateBuffer<T>(in BufferDescription description, ReadOnlySpan<T> initialData) where T : unmanaged
+    {
+        fixed (T* initialDataPtr = initialData)
+            return CreateBuffer(description, initialDataPtr);
+    }
+
+    public GraphicsBuffer CreateBuffer<T>(Span<T> initialData,
+        BufferUsage usage = BufferUsage.ShaderReadWrite,
+        CpuAccessMode cpuAccess = CpuAccessMode.None,
+        string? label = default)
+        where T : unmanaged
+    {
+        int typeSize = sizeof(T);
+        Guard.IsTrue(initialData.Length > 0, nameof(initialData));
+
+        BufferDescription description = new((uint)(initialData.Length * typeSize), usage, cpuAccess, label);
+        return CreateBuffer(description, ref MemoryMarshal.GetReference(initialData));
     }
 
     public GraphicsBuffer CreateBuffer<T>(T[] initialData,
@@ -78,32 +101,7 @@ public abstract class GraphicsDevice : GraphicsObject
 
         return CreateBuffer(dataSpan, usage, cpuAccess);
     }
-
-    public unsafe GraphicsBuffer CreateBuffer<T>(Span<T> initialData,
-        BufferUsage usage = BufferUsage.ShaderReadWrite,
-        CpuAccessMode cpuAccess = CpuAccessMode.None,
-        string? label = default)
-        where T : unmanaged
-    {
-        int typeSize = sizeof(T);
-        Guard.IsTrue(initialData.Length > 0, nameof(initialData));
-
-        BufferDescription description = new((uint)(initialData.Length * typeSize), usage, cpuAccess, label);
-        return CreateBuffer(description, ref MemoryMarshal.GetReference(initialData));
-    }
-
-    public unsafe GraphicsBuffer CreateBuffer<T>(ReadOnlySpan<T> initialData,
-        BufferUsage usage = BufferUsage.ShaderReadWrite,
-        CpuAccessMode cpuAccess = CpuAccessMode.None,
-        string? label = default)
-        where T : unmanaged
-    {
-        int typeSize = sizeof(T);
-        Guard.IsTrue(initialData.Length > 0, nameof(initialData));
-
-        BufferDescription description = new((uint)(initialData.Length * typeSize), usage, cpuAccess, label);
-        return CreateBuffer(description, ref MemoryMarshal.GetReference(initialData));
-    }
+    #endregion
 
     public unsafe Texture CreateTexture<T>(in TextureDescription description, ref T initialData) where T : unmanaged
     {

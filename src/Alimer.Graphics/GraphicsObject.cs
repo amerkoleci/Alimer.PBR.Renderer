@@ -1,20 +1,16 @@
-﻿// Copyright © Amer Koleci and Contributors.
+﻿// Copyright (c) Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using System.Runtime.CompilerServices;
-using CommunityToolkit.Diagnostics;
+using System.Reflection;
+using XenoAtom.Interop;
 
 namespace Alimer.Graphics;
 
 public abstract class GraphicsObject : IDisposable
 {
-#if NET6_0_OR_GREATER
     private volatile uint _isDisposed;
-#else
-    private volatile int _isDisposed;
-#endif
     protected string _label;
-    private readonly List<IDisposable> _disposables = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GraphicsObject" /> class.
@@ -24,6 +20,16 @@ public abstract class GraphicsObject : IDisposable
     {
         _isDisposed = 0;
         _label = label ?? GetType().Name;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GraphicsObject" /> class.
+    /// </summary>
+    /// <param name="label">The label of the object or <c>null</c> to use <see cref="MemberInfo.Name" />.</param>
+    protected GraphicsObject(ReadOnlyMemoryUtf8 label)
+    {
+        _isDisposed = 0;
+        _label = label.IsNull ? GetType().Name : label.ToString()!;
     }
 
     /// <summary>
@@ -60,16 +66,7 @@ public abstract class GraphicsObject : IDisposable
 
     /// <inheritdoc cref="Dispose()" />
     /// <param name="disposing"><c>true</c> if the method was called from <see cref="Dispose()" />; otherwise, <c>false</c>.</param>
-    protected virtual void Dispose(bool disposing)
-    {
-        if (disposing)
-        {
-            for (int i = _disposables.Count - 1; i >= 0; i--)
-            {
-                _disposables[i].Dispose();
-            }
-        }
-    }
+    protected abstract void Dispose(bool disposing);
 
     /// <inheritdoc />
     public override string ToString() => _label;
@@ -89,45 +86,5 @@ public abstract class GraphicsObject : IDisposable
     protected void MarkDisposed()
     {
         _ = Interlocked.Exchange(ref _isDisposed, 1);
-    }
-
-    /// <summary>
-    /// Adds a disposable object to the list of the objects to dispose.
-    /// </summary>
-    /// <param name="item">To dispose.</param>
-    protected internal T AddDisposable<T>(T objectToDispose)
-        where T : IDisposable
-    {
-        Guard.IsNotNull(objectToDispose);
-
-        _disposables.Add(objectToDispose);
-        return objectToDispose;
-    }
-
-    /// <summary>
-    /// Removes a disposable object to the list of the objects to dispose.
-    /// </summary>
-    /// <typeparam name="T"></typeparam>
-    /// <param name="objectToDispose">The previously added object to dispose.</param>
-    protected internal void RemoveDisposable<T>(T objectToDispose)
-        where T : IDisposable
-    {
-        Guard.IsNotNull(objectToDispose);
-
-        _disposables.Remove(objectToDispose);
-    }
-
-    /// <summary>
-    /// Dispose a disposable object and set the reference to null. 
-    /// Removes this object from the ToDispose list.
-    /// </summary>
-    /// <param name="objectToDispose">Object to dispose.</param>
-    protected internal void RemoveAndDispose<T>(T objectToDispose)
-        where T : IDisposable
-    {
-        Guard.IsNotNull(objectToDispose);
-
-        _disposables.Remove(objectToDispose);
-        objectToDispose.Dispose();
     }
 }

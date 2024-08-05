@@ -1,7 +1,8 @@
-﻿// Copyright © Amer Koleci and Contributors.
+﻿// Copyright (c) Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using CommunityToolkit.Diagnostics;
+using XenoAtom.Interop;
 
 namespace Alimer.Graphics;
 
@@ -14,6 +15,17 @@ public abstract class GraphicsResource : GraphicsObject
     /// <param name="device">The device object that created the resource..</param>
     /// <param name="label">The label of the object or <c>null</c> to use <see cref="System.Reflection.MemberInfo.Name" />.</param>
     protected GraphicsResource(GraphicsDevice device, string? label = default)
+        : base(label)
+    {
+        Guard.IsNotNull(device, nameof(device));
+
+        Device = device;
+    }
+
+    /// <summary>Initializes a new instance of the <see cref="GraphicsResource" /> class.</summary>
+    /// <param name="device">The device object that created the resource..</param>
+    /// <param name="label">The label of the object or <c>null</c> to use <see cref="System.Reflection.MemberInfo.Name" />.</param>
+    protected GraphicsResource(GraphicsDevice device, ReadOnlyMemoryUtf8 label)
         : base(label)
     {
         Guard.IsNotNull(device, nameof(device));

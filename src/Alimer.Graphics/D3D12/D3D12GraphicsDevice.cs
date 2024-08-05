@@ -24,6 +24,8 @@ internal sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
     private readonly ComPtr<IDXGIFactory4> _dxgiFactory;
     private readonly bool _isTearingSupported;
     private readonly ComPtr<ID3D12Device> _device;
+    private readonly GraphicsDeviceLimits _limits;
+
     private readonly ComPtr<ID3D12CommandQueue> _graphicsQueue;
     private readonly ComPtr<ID3D12Fence> _frameFence;
     private readonly ulong[] _fenceValues = new ulong[NumFramesInFlight];
@@ -54,6 +56,9 @@ internal sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
     public ID3D12RootSignature* ComputeRootSignature => _computeRootSignature;
 
     public uint FrameIndex => _frameIndex;
+
+    /// <inheritdoc />
+    public override GraphicsDeviceLimits Limits => _limits;
 
     public override CommandContext DefaultContext { get; }
 
@@ -193,6 +198,20 @@ internal sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
         }
 #endif
 
+        _limits = new GraphicsDeviceLimits
+        {
+            MaxTextureDimension1D = D3D12_REQ_TEXTURE1D_U_DIMENSION,
+            MaxTextureDimension2D = D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION,
+            MaxTextureDimension3D = D3D12_REQ_TEXTURE3D_U_V_OR_W_DIMENSION,
+            MaxTextureDimensionCube = D3D12_REQ_TEXTURECUBE_DIMENSION,
+            MaxTextureArrayLayers = D3D12_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION,
+            MaxBufferSize = D3D12_REQ_RESOURCE_SIZE_IN_MEGABYTES_EXPRESSION_A_TERM * 1024u * 1024u,
+            MinConstantBufferOffsetAlignment = D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT,
+            MaxConstantBufferBindingSize = D3D12_REQ_IMMEDIATE_CONSTANT_BUFFER_ELEMENT_COUNT * 16,
+            MinStorageBufferOffsetAlignment = D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT,
+            MaxStorageBufferBindingSize = (1u << (int)D3D12_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP) - 1,
+        };
+
         // Determine maximum supported MSAA level.
         uint samples;
         for (samples = (uint)maxSamples; samples > 1; samples /= 2)
@@ -317,7 +336,6 @@ internal sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
             WaitForGPU();
 
             _shuttingDown = true;
-            base.Dispose(disposing);
 
             _frameCount = ulong.MaxValue;
             ProcessDeletionQueue();
@@ -351,10 +369,6 @@ internal sealed unsafe class D3D12GraphicsDevice : GraphicsDevice
                 dxgiDebug.Get()->ReportLiveObjects(DXGI_DEBUG_ALL, ReportLiveObjectFlags.Summary | ReportLiveObjectFlags.IgnoreInternal);
             }
 #endif
-        }
-        else
-        {
-            base.Dispose(false);
         }
     }
 

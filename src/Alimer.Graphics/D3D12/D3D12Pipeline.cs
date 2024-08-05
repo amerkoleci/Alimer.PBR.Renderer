@@ -25,7 +25,7 @@ internal sealed unsafe class D3D12Pipeline : Pipeline
             pRootSignature = _rootSignature,
             CS = new ShaderBytecode
             {
-                pShaderBytecode = UnsafeUtilities.GetPointer(description.ComputeShader.Span),
+                pShaderBytecode = UnsafeUtilities.GetPointer(description.ComputeShader),
                 BytecodeLength = (nuint)description.ComputeShader.Length
             }
         };
@@ -37,9 +37,9 @@ internal sealed unsafe class D3D12Pipeline : Pipeline
             throw new InvalidOperationException("D3D12: Failed to create compute pipeline");
         }
 
-        if (!string.IsNullOrEmpty(description.Label))
+        if (!description.Label.IsNull)
         {
-            _handle.Get()->SetName(description.Label);
+            //_handle.Get()->SetName(description.Label);
         }
     }
 
@@ -156,7 +156,7 @@ internal sealed unsafe class D3D12Pipeline : Pipeline
         //};
         //ThrowIfFailed(device.NativeDevice->CreateDepthStencilState(&depthStencilDesc, _depthStencilState.GetAddressOf()));
 
-        if (!string.IsNullOrEmpty(description.Label))
+        if (!description.Label.IsNull)
         {
             //_handle.Get()->SetName(description.Label);
         }
@@ -172,8 +172,6 @@ internal sealed unsafe class D3D12Pipeline : Pipeline
 
     protected override void Dispose(bool disposing)
     {
-        base.Dispose(disposing);
-
         if (disposing)
         {
             //((D3D12GraphicsDevice)Device).DeferDestroy((IUnknown*)_handle.Get());

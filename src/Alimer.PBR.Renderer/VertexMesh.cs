@@ -1,4 +1,4 @@
-﻿// Copyright (c) Amer Koleci and Contributors
+// Copyright (c) Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using System.Numerics;
@@ -12,13 +12,13 @@ public readonly record struct VertexMesh
 {
     public static readonly unsafe int SizeInBytes = sizeof(VertexMesh);
 
-    public static readonly VertexAttributeDescriptor[] Attributes = new[]
-    {
-        new VertexAttributeDescriptor(VertexFormat.Float32x3, 0),
-        new VertexAttributeDescriptor(VertexFormat.Float32x3, 12),
-        new VertexAttributeDescriptor(VertexFormat.Float32x3, 24),
-        new VertexAttributeDescriptor(VertexFormat.Float32x2, 36)
-    };
+    public static readonly VertexAttributeDescriptor[] Attributes =
+    [
+        new VertexAttributeDescriptor(VertexFormat.Float3, 0),
+        new VertexAttributeDescriptor(VertexFormat.Float3, 12),
+        new VertexAttributeDescriptor(VertexFormat.Float3, 24),
+        new VertexAttributeDescriptor(VertexFormat.Float2, 36)
+    ];
 
     public VertexMesh(in Vector3 position, in Vector3 normal, in Vector3 tangent, in Vector2 texcoord)
     {

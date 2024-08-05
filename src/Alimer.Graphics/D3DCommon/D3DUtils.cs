@@ -1,9 +1,10 @@
-﻿// Copyright (c) Amer Koleci and Contributors
+// Copyright (c) Amer Koleci and Contributors
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using Win32;
 using Win32.Graphics.Dxgi.Common;
 using D3DPrimitiveTopology = Win32.Graphics.Direct3D.PrimitiveTopology;
+using static Win32.Graphics.Dxgi.Common.Apis;
 
 namespace Alimer.Graphics;
 
@@ -49,10 +50,10 @@ internal static class D3DUtils
             case TextureFormat.Bgra8Unorm: return Format.B8G8R8A8Unorm;
             case TextureFormat.Bgra8UnormSrgb: return Format.B8G8R8A8UnormSrgb;
             // Packed 32-Bit formats
-            case TextureFormat.Rgb9e5Ufloat: return Format.R9G9B9E5SharedExp;
-            case TextureFormat.Rgb10a2Unorm: return Format.R10G10B10A2Unorm;
-            case TextureFormat.Rgb10a2Uint: return Format.R10G10B10A2Uint;
-            case TextureFormat.Rg11b10Float: return Format.R11G11B10Float;
+            case TextureFormat.RGB10A2Unorm: return Format.R10G10B10A2Unorm;
+            case TextureFormat.RGB10A2Uint: return Format.R10G10B10A2Uint;
+            case TextureFormat.RG11B10Ufloat: return Format.R11G11B10Float;
+            case TextureFormat.RGB9E5Ufloat: return Format.R9G9B9E5SharedExp;
             // 64-Bit formats
             case TextureFormat.Rg32Uint: return Format.R32G32Uint;
             case TextureFormat.Rg32Sint: return Format.R32G32Sint;
@@ -97,45 +98,47 @@ internal static class D3DUtils
     {
         switch (format)
         {
-            case VertexFormat.Uint8x2: return Format.R8G8Uint;
-            case VertexFormat.Uint8x4: return Format.R8G8B8A8Uint;
-            case VertexFormat.Sint8x2: return Format.R8G8Sint;
-            case VertexFormat.Sint8x4: return Format.R8G8B8A8Sint;
-            case VertexFormat.Unorm8x2: return Format.R8G8Unorm;
-            case VertexFormat.Unorm8x4: return Format.R8G8B8A8Unorm;
-            case VertexFormat.Snorm8x2: return Format.R8G8Snorm;
-            case VertexFormat.Snorm8x4: return Format.R8G8B8A8Snorm;
+            case VertexFormat.UByte2: return DXGI_FORMAT_R8G8_UINT;
+            case VertexFormat.UByte4: return DXGI_FORMAT_R8G8B8A8_UINT;
+            case VertexFormat.Byte2: return DXGI_FORMAT_R8G8_SINT;
+            case VertexFormat.Byte4: return DXGI_FORMAT_R8G8B8A8_SINT;
+            case VertexFormat.UByte2Normalized: return DXGI_FORMAT_R8G8_UNORM;
+            case VertexFormat.UByte4Normalized: return DXGI_FORMAT_R8G8B8A8_UNORM;
+            case VertexFormat.Byte2Normalized: return DXGI_FORMAT_R8G8_SNORM;
+            case VertexFormat.Byte4Normalized: return DXGI_FORMAT_R8G8B8A8_SNORM;
 
-            case VertexFormat.Uint16x2: return Format.R16G16Uint;
-            case VertexFormat.Uint16x4: return Format.R16G16B16A16Uint;
-            case VertexFormat.Sint16x2: return Format.R16G16Sint;
-            case VertexFormat.Sint16x4: return Format.R16G16B16A16Sint;
-            case VertexFormat.Unorm16x2: return Format.R16G16Unorm;
-            case VertexFormat.Unorm16x4: return Format.R16G16B16A16Unorm;
-            case VertexFormat.Snorm16x2: return Format.R16G16Snorm;
-            case VertexFormat.Snorm16x4: return Format.R16G16B16A16Snorm;
-            case VertexFormat.Float16x2: return Format.R16G16Float;
-            case VertexFormat.Float16x4: return Format.R16G16B16A16Float;
+            case VertexFormat.UShort2: return DXGI_FORMAT_R16G16_UINT;
+            case VertexFormat.UShort4: return DXGI_FORMAT_R16G16B16A16_UINT;
+            case VertexFormat.Short2: return DXGI_FORMAT_R16G16_SINT;
+            case VertexFormat.Short4: return DXGI_FORMAT_R16G16B16A16_SINT;
+            case VertexFormat.UShort2Normalized: return DXGI_FORMAT_R16G16_UNORM;
+            case VertexFormat.UShort4Normalized: return DXGI_FORMAT_R16G16B16A16_UNORM;
+            case VertexFormat.Short2Normalized: return DXGI_FORMAT_R16G16_SNORM;
+            case VertexFormat.Short4Normalized: return DXGI_FORMAT_R16G16B16A16_SNORM;
+            case VertexFormat.Half2: return DXGI_FORMAT_R16G16_FLOAT;
+            case VertexFormat.Half4: return DXGI_FORMAT_R16G16B16A16_FLOAT;
 
-            case VertexFormat.Float32: return Format.R32Float;
-            case VertexFormat.Float32x2: return Format.R32G32Float;
-            case VertexFormat.Float32x3: return Format.R32G32B32Float;
-            case VertexFormat.Float32x4: return Format.R32G32B32A32Float;
+            case VertexFormat.Float: return DXGI_FORMAT_R32_FLOAT;
+            case VertexFormat.Float2: return DXGI_FORMAT_R32G32_FLOAT;
+            case VertexFormat.Float3: return DXGI_FORMAT_R32G32B32_FLOAT;
+            case VertexFormat.Float4: return DXGI_FORMAT_R32G32B32A32_FLOAT;
 
-            case VertexFormat.Uint32: return Format.R32Uint;
-            case VertexFormat.Uint32x2: return Format.R32G32Uint;
-            case VertexFormat.Uint32x3: return Format.R32G32B32Uint;
-            case VertexFormat.Uint32x4: return Format.R32G32B32A32Uint;
+            case VertexFormat.UInt: return DXGI_FORMAT_R32_UINT;
+            case VertexFormat.UInt2: return DXGI_FORMAT_R32G32_UINT;
+            case VertexFormat.UInt3: return DXGI_FORMAT_R32G32B32_UINT;
+            case VertexFormat.UInt4: return DXGI_FORMAT_R32G32B32A32_UINT;
 
-            case VertexFormat.Sint32: return Format.R32Sint;
-            case VertexFormat.Sint32x2: return Format.R32G32Sint;
-            case VertexFormat.Sint32x3: return Format.R32G32B32Sint;
-            case VertexFormat.Sint32x4: return Format.R32G32B32A32Sint;
+            case VertexFormat.Int: return DXGI_FORMAT_R32_SINT;
+            case VertexFormat.Int2: return DXGI_FORMAT_R32G32_SINT;
+            case VertexFormat.Int3: return DXGI_FORMAT_R32G32B32_SINT;
+            case VertexFormat.Int4: return DXGI_FORMAT_R32G32B32A32_SINT;
 
-            case VertexFormat.RGB10A2Unorm: return Format.R10G10B10A2Unorm;
+            case VertexFormat.UInt1010102Normalized: return DXGI_FORMAT_R10G10B10A2_UNORM;
+            case VertexFormat.RG11B10Float: return DXGI_FORMAT_R11G11B10_FLOAT;
+            case VertexFormat.RGB9E5Float: return DXGI_FORMAT_R9G9B9E5_SHAREDEXP;
 
             default:
-                return Format.Unknown;
+                return DXGI_FORMAT_UNKNOWN;
         }
     }
 

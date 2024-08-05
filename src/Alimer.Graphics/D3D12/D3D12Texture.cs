@@ -133,8 +133,6 @@ internal sealed unsafe class D3D12Texture : Texture, ID3D11GpuResource
 
     protected override void Dispose(bool disposing)
     {
-        base.Dispose(disposing);
-
         if (disposing)
         {
             D3D12GraphicsDevice backendDevice = ((D3D12GraphicsDevice)Device);

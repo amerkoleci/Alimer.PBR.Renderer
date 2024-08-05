@@ -15,6 +15,7 @@
     <LangVersion>12</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <UseArtifactsOutput>true</UseArtifactsOutput>
     <!-- Local builds should embed PDBs so we never lose them when a subsequent build occurs. -->
     <DebugType Condition=" '$(CI)' != 'true' and '$(TF_BUILD)' != 'true' ">embedded</DebugType>
     <Features>strict</Features>
@@ -53,11 +54,6 @@
   <PropertyGroup>
     <_AlimerTargetPlatformIdentifier>$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)'))</_AlimerTargetPlatformIdentifier>
     <_AlimerTargetPlatformIsWindows Condition="$(_AlimerTargetPlatformIdentifier.Contains('windows')) == 'True'">True</_AlimerTargetPlatformIsWindows>
-  </PropertyGroup>
-
-  <!-- UAP -->
-  <PropertyGroup Condition=" $(TargetFramework.StartsWith('uap10.0')) ">
-    <ExtrasUwpMetaPackageVersion>6.2.14</ExtrasUwpMetaPackageVersion>
   </PropertyGroup>
 
 </Project>
