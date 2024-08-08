@@ -1,4 +1,4 @@
-﻿// Copyright © Amer Koleci and Contributors.
+﻿// Copyright (c) Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using Win32.Graphics.Direct3D12;
@@ -14,20 +14,20 @@ internal static class D3D12Utils
 {
     public static readonly HeapProperties DefaultHeapProps = new(HeapType.Default);
     public static readonly HeapProperties UploadHeapProps = new(HeapType.Upload);
-    public static readonly HeapProperties ReadbackeapProps = new(HeapType.Readback);
+    public static readonly HeapProperties ReadbackHeapProps = new(HeapType.Readback);
 
-    private static readonly D3DFillMode[] s_FillModeMap = new D3DFillMode[(int)(FillMode.Wireframe + 1)] {
+    private static readonly D3DFillMode[] s_fillModeMap = [
         D3DFillMode.Solid,
         D3DFillMode.Wireframe
-    };
+    ];
 
-    private static readonly D3DCullMode[] s_cullModeMap = new D3DCullMode[(int)(CullMode.None + 1)] {
+    private static readonly D3DCullMode[] s_cullModeMap = [
         D3DCullMode.Back,
         D3DCullMode.Front,
         D3DCullMode.None,
-    };
+    ];
 
-    private static readonly Blend[] s_blendFactorMap = new Blend[(int)(BlendFactor.OneMinusBlendColor + 1)] {
+    private static readonly Blend[] s_blendFactorMap = [
         Blend.Zero,
         Blend.One,
         Blend.SrcColor,
@@ -41,17 +41,17 @@ internal static class D3D12Utils
         Blend.SrcAlphaSaturate,
         Blend.BlendFactor,
         Blend.InverseBlendFactor
-    };
+    ];
 
-    private static readonly D3DBlendOperation[] s_blendOpMap = new D3DBlendOperation[(int)(BlendOperation.Max + 1)] {
+    private static readonly D3DBlendOperation[] s_blendOpMap = [
         D3DBlendOperation.Add,
         D3DBlendOperation.Subtract,
         D3DBlendOperation.ReverseSubtract,
         D3DBlendOperation.Min,
         D3DBlendOperation.Max,
-    };
+    ];
 
-    private static readonly D3DStencilOperation[] s_stencilOperationMap = new D3DStencilOperation[(int)(StencilOperation.DecrementWrap + 1)] {
+    private static readonly D3DStencilOperation[] s_stencilOperationMap = [
         D3DStencilOperation.Keep,
         D3DStencilOperation.Zero,
         D3DStencilOperation.Replace,
@@ -60,9 +60,9 @@ internal static class D3D12Utils
         D3DStencilOperation.Invert,
         D3DStencilOperation.Increment,
         D3DStencilOperation.Decrement,
-    };
+    ];
 
-    public static D3DFillMode ToD3D12(this FillMode value) => s_FillModeMap[(uint)value];
+    public static D3DFillMode ToD3D12(this FillMode value) => s_fillModeMap[(uint)value];
     public static D3DCullMode ToD3D12(this CullMode value) => s_cullModeMap[(uint)value];
     public static Blend ToD3D12(this BlendFactor factor) => s_blendFactorMap[(uint)factor];
     public static D3DBlendOperation ToD3D12(this BlendOperation value) => s_blendOpMap[(uint)value];
@@ -100,32 +100,28 @@ internal static class D3D12Utils
 
     public static ComparisonFunction ToD3D12(this CompareFunction function)
     {
-        switch (function)
+        return function switch
         {
-            case CompareFunction.Never: return ComparisonFunction.Never;
-            case CompareFunction.Less: return ComparisonFunction.Less;
-            case CompareFunction.Equal: return ComparisonFunction.Equal;
-            case CompareFunction.LessEqual: return ComparisonFunction.LessEqual;
-            case CompareFunction.Greater: return ComparisonFunction.Greater;
-            case CompareFunction.NotEqual: return ComparisonFunction.NotEqual;
-            case CompareFunction.GreaterEqual: return ComparisonFunction.GreaterEqual;
-            case CompareFunction.Always: return ComparisonFunction.Always;
-
-            default:
-                return ComparisonFunction.Never;
-        }
+            CompareFunction.Never => ComparisonFunction.Never,
+            CompareFunction.Less => ComparisonFunction.Less,
+            CompareFunction.Equal => ComparisonFunction.Equal,
+            CompareFunction.LessEqual => ComparisonFunction.LessEqual,
+            CompareFunction.Greater => ComparisonFunction.Greater,
+            CompareFunction.NotEqual => ComparisonFunction.NotEqual,
+            CompareFunction.GreaterEqual => ComparisonFunction.GreaterEqual,
+            CompareFunction.Always => ComparisonFunction.Always,
+            _ => ComparisonFunction.Never,
+        };
     }
 
     public static FilterType ToD3D12(this SamplerMinMagFilter filter)
     {
-        switch (filter)
+        return filter switch
         {
-            case SamplerMinMagFilter.Nearest: return FilterType.Point;
-            case SamplerMinMagFilter.Linear: return FilterType.Linear;
-
-            default:
-                return FilterType.Point;
-        }
+            SamplerMinMagFilter.Nearest => FilterType.Point,
+            SamplerMinMagFilter.Linear => FilterType.Linear,
+            _ => FilterType.Point,
+        };
     }
 
     public static FilterType ToD3D12(this SamplerMipFilter filter)

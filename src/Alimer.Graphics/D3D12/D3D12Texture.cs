@@ -1,4 +1,4 @@
-﻿// Copyright © Amer Koleci and Contributors.
+﻿// Copyright (c) Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using Win32;
@@ -15,9 +15,9 @@ internal sealed unsafe class D3D12Texture : Texture, ID3D11GpuResource
     private readonly CpuDescriptorHandle _srv = default;
     private readonly object _rtvLock = new();
     private readonly object _uavLock = new();
-    private readonly Dictionary<int, CpuDescriptorHandle> _rtvs = new();
-    private readonly Dictionary<int, CpuDescriptorHandle> _dsvs = new();
-    private readonly Dictionary<int, CpuDescriptorHandle> _uavs = new();
+    private readonly Dictionary<int, CpuDescriptorHandle> _rtvs = [];
+    private readonly Dictionary<int, CpuDescriptorHandle> _dsvs = [];
+    private readonly Dictionary<int, CpuDescriptorHandle> _uavs = [];
 
     public D3D12Texture(D3D12GraphicsDevice device, in TextureDescription description, in ComPtr<ID3D12Resource> existingHandle)
         : base(device, description)
@@ -109,9 +109,11 @@ internal sealed unsafe class D3D12Texture : Texture, ID3D11GpuResource
 
         if ((description.Usage & TextureUsage.ShaderRead) != 0)
         {
-            ShaderResourceViewDescription srvDesc = new();
-            srvDesc.Format = DxgiFormat;
-            srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+            ShaderResourceViewDescription srvDesc = new()
+            {
+                Format = DxgiFormat,
+                Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING
+            };
 
             if (description.Dimension == TextureDimension.TextureCube)
             {

@@ -12,7 +12,7 @@ public readonly record struct BufferDescription
 {
     [SetsRequiredMembers]
     public BufferDescription(
-       uint size,
+       ulong size,
        BufferUsage usage = BufferUsage.ShaderReadWrite,
        CpuAccessMode cpuAccess = CpuAccessMode.None,
        string? label = default)
@@ -31,7 +31,7 @@ public readonly record struct BufferDescription
     /// <summary>
     /// Gets or sets the size in bytes of the buffer.
     /// </summary>
-    public required uint Size { get; init; }
+    public required ulong Size { get; init; }
 
     /// <summary>
     /// Gets or sets tge CPU access of the buffer.

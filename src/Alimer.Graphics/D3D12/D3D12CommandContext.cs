@@ -1,4 +1,4 @@
-﻿// Copyright © Amer Koleci and Contributors.
+﻿// Copyright (c) Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using CommunityToolkit.Diagnostics;
@@ -9,6 +9,7 @@ using XenoAtom.Interop;
 using static Win32.Apis;
 using static Win32.Graphics.Direct3D12.Apis;
 using D3DPrimitiveTopology = Win32.Graphics.Direct3D.PrimitiveTopology;
+using static Win32.Graphics.Dxgi.Common.Apis;
 
 namespace Alimer.Graphics.D3D12;
 
@@ -422,7 +423,7 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
         //_commandList.Get()->SetPipelineState(d3d12Pipeline.Handle);
     }
 
-    public override void SetVertexBuffer(uint slot, GraphicsBuffer buffer, uint offset = 0)
+    public override void SetVertexBuffer(uint slot, GraphicsBuffer buffer, ulong offset = 0)
     {
         //var d3dBuffer = ((D3D12Buffer)buffer);
         //
@@ -433,10 +434,17 @@ internal sealed unsafe class D3D12CommandContext : CommandContext
         //}
     }
 
-    public override void SetIndexBuffer(GraphicsBuffer buffer, uint offset, IndexType indexType)
+    public override void SetIndexBuffer(GraphicsBuffer buffer, ulong offset, IndexType indexType)
     {
-        //var d3dBuffer = ((D3D12Buffer)buffer).Handle;
-        //_context->IASetIndexBuffer(d3dBuffer, indexType.ToDxgiFormat(), offset);
+        ulong gpuVirtualAddress = ((D3D12Buffer)buffer).GpuVirtualAddress;
+
+        IndexBufferView view = new(
+            gpuVirtualAddress + offset,
+            (uint)(buffer.Size - offset),
+            indexType == IndexType.Uint16 ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT
+        );
+
+        _commandList.Get()->IASetIndexBuffer(&view);
     }
 
     public override void SetConstantBuffer(int index, GraphicsBuffer buffer)

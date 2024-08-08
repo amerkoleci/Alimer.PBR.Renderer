@@ -17,18 +17,16 @@ namespace Alimer.Graphics.D3D11;
 
 internal sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
 {
-    private readonly ComPtr<IDXGIFactory2> _dxgiFactory;
-    private readonly bool _isTearingSupported;
+    private readonly D3D11GraphicsFactory _factory;
+    private readonly ComPtr<IDXGIAdapter1> _adapter;
     private readonly ComPtr<ID3D11Device1> _device;
     private readonly ComPtr<ID3D11DeviceContext1> _context;
     private readonly FeatureLevel _featureLevel = FeatureLevel.Level_9_1;
 
     private readonly GraphicsDeviceLimits _limits;
-    private readonly ComPtr<IDXGISwapChain1> _swapChain;
-    private D3D11Texture? _colorTexture;
 
-    public Size Size { get; private set; }
-    public TextureFormat ColorFormat { get; } = TextureFormat.Bgra8Unorm;
+    public D3D11GraphicsFactory Factory => _factory;
+
     public ID3D11Device1* NativeDevice => _device;
     public ID3D11DeviceContext1* NativeContext => _context;
 
@@ -37,72 +35,11 @@ internal sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
 
     public override CommandContext DefaultContext { get; }
 
-    public override Texture ColorTexture => _colorTexture!;
-
-    public override TextureSampleCount SampleCount { get; }
-
-    public D3D11GraphicsDevice(in nint window, bool isFullscreen, TextureSampleCount maxSamples = TextureSampleCount.Count4)
-        : base(GraphicsBackend.Direct3D11, window, isFullscreen)
+    public D3D11GraphicsDevice(D3D11GraphicsFactory factory, ComPtr<IDXGIAdapter1> adapter, in GraphicsDeviceDescription description)
+        : base(in description)
     {
-#if DEBUG
-        {
-            using ComPtr<IDXGIInfoQueue> dxgiInfoQueue = default;
-            if (DXGIGetDebugInterface1(0, __uuidof<IDXGIInfoQueue>(), (void**)dxgiInfoQueue.GetAddressOf()).Success)
-            {
-                dxgiInfoQueue.Get()->SetBreakOnSeverity(DXGI_DEBUG_ALL, InfoQueueMessageSeverity.Error, true);
-                dxgiInfoQueue.Get()->SetBreakOnSeverity(DXGI_DEBUG_ALL, InfoQueueMessageSeverity.Corruption, true);
-            }
-        }
-#endif
-
-        HResult hr = CreateDXGIFactory1(__uuidof<IDXGIFactory2>(), _dxgiFactory.GetVoidAddressOf());
-
-        {
-            using ComPtr<IDXGIFactory5> factory5 = default;
-            if (_dxgiFactory.CopyTo(&factory5).Success)
-            {
-                _isTearingSupported = factory5.Get()->IsTearingSupported();
-            }
-        }
-
-        using ComPtr<IDXGIAdapter1> adapter = default;
-
-        using ComPtr<IDXGIFactory6> factory6 = default;
-        if (_dxgiFactory.CopyTo(&factory6).Success)
-        {
-            for (uint adapterIndex = 0;
-                factory6.Get()->EnumAdapterByGpuPreference(
-                    adapterIndex,
-                    GpuPreference.HighPerformance,
-                    __uuidof<IDXGIAdapter1>(),
-                    (void**)adapter.ReleaseAndGetAddressOf()).Success;
-                adapterIndex++)
-            {
-                AdapterDescription1 desc = default;
-                ThrowIfFailed(adapter.Get()->GetDesc1(&desc));
-
-                if ((desc.Flags & AdapterFlags.Software) != AdapterFlags.None)
-                    continue;
-
-                break;
-            }
-        }
-
-        if (adapter.Get() == null)
-        {
-            for (uint adapterIndex = 0;
-                _dxgiFactory.Get()->EnumAdapters1(adapterIndex, adapter.ReleaseAndGetAddressOf()).Success;
-                adapterIndex++)
-            {
-                AdapterDescription1 desc = default;
-                ThrowIfFailed(adapter.Get()->GetDesc1(&desc));
-
-                if ((desc.Flags & AdapterFlags.Software) != AdapterFlags.None)
-                    continue;
-
-                break;
-            }
-        }
+        _factory = factory;
+        _adapter = adapter.Move();
 
         CreateDeviceFlags creationFlags = CreateDeviceFlags.BgraSupport;
 #if DEBUG
@@ -117,13 +54,13 @@ internal sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
         using ComPtr<ID3D11DeviceContext> tempContext = default;
         FeatureLevel featureLevel;
 
-        ReadOnlySpan<FeatureLevel> featureLevels = stackalloc FeatureLevel[1]
-        {
+        ReadOnlySpan<FeatureLevel> featureLevels =
+        [
             FeatureLevel.Level_11_0
-        };
+        ];
 
         HResult result = D3D11CreateDevice(
-            (IDXGIAdapter*)adapter.Get(),
+            (IDXGIAdapter*)_adapter.Get(),
             DriverType.Unknown,
             creationFlags,
             featureLevels,
@@ -179,57 +116,7 @@ internal sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
             MaxStorageBufferBindingSize = (1u << (int)D3D11_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP) - 1,
         };
 
-        // Determine maximum supported MSAA level.
-        uint samples;
-        for (samples = (uint)maxSamples; samples > 1; samples /= 2)
-        {
-            uint colorQualityLevels;
-            uint depthStencilQualityLevels;
-            _device.Get()->CheckMultisampleQualityLevels(Format.R16G16B16A16Float, samples, &colorQualityLevels);
-            _device.Get()->CheckMultisampleQualityLevels(Format.D24UnormS8Uint, samples, &depthStencilQualityLevels);
-            if (colorQualityLevels > 0 && depthStencilQualityLevels > 0)
-            {
-                break;
-            }
-        }
-
         DefaultContext = new D3D11CommandContext(this);
-        SampleCount = (TextureSampleCount)samples;
-
-        // Create SwapChain
-        {
-            SwapChainDescription1 swapChainDesc = new()
-            {
-                Width = 0u,
-                Height = 0u,
-                Format = ColorFormat.ToDxgiFormat(),
-                BufferCount = 2u,
-                BufferUsage = Win32.Graphics.Dxgi.Usage.RenderTargetOutput,
-                SampleDesc = SampleDescription.Default,
-                Scaling = Scaling.Stretch,
-                SwapEffect = SwapEffect.FlipDiscard,
-                AlphaMode = AlphaMode.Ignore,
-                Flags = _isTearingSupported ? SwapChainFlags.AllowTearing : SwapChainFlags.None
-            };
-
-            SwapChainFullscreenDescription fsSwapChainDesc = new()
-            {
-                Windowed = !isFullscreen
-            };
-
-            result = _dxgiFactory.Get()->CreateSwapChainForHwnd(
-                 (IUnknown*)_device.Get(),
-                Window,
-                &swapChainDesc,
-                &fsSwapChainDesc,
-                null,
-                _swapChain.GetAddressOf()
-                );
-            ThrowIfFailed(result);
-
-            _dxgiFactory.Get()->MakeWindowAssociation(Window, WindowAssociationFlags.NoAltEnter);
-            AfterResize();
-        }
     }
 
     protected override void Dispose(bool disposing)
@@ -238,42 +125,34 @@ internal sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
 
         if (disposing)
         {
-            _colorTexture!.Dispose();
-            _swapChain.Dispose();
             DefaultContext.Dispose();
             _context.Dispose();
             _device.Dispose();
-
-            _dxgiFactory.Dispose();
-
-#if DEBUG
-            using ComPtr<IDXGIDebug1> dxgiDebug = default;
-            if (DXGIGetDebugInterface1(0, __uuidof<IDXGIDebug1>(), dxgiDebug.GetVoidAddressOf()).Success)
-            {
-                dxgiDebug.Get()->ReportLiveObjects(DXGI_DEBUG_ALL, ReportLiveObjectFlags.Summary | ReportLiveObjectFlags.IgnoreInternal);
-            }
-#endif
+            _adapter.Dispose();
         }
     }
 
-    private void AfterResize()
+    public override TextureSampleCount QueryMaxTextureSampleCount(TextureFormat format)
     {
-        if (_colorTexture is not null)
+        Format dxgiFormat = format.ToDxgiFormat();
+        if(dxgiFormat == Format.Unknown)
         {
+            return TextureSampleCount.Count1;
         }
 
-        SwapChainDescription1 swapChainDesc;
-        ThrowIfFailed(_swapChain.Get()->GetDesc1(&swapChainDesc));
+        // Determine maximum supported MSAA level.
+        uint samples;
+        for (samples = (uint)TextureSampleCount.Count64; samples > 1; samples /= 2)
+        {
+            uint qualityLevels;
+            _device.Get()->CheckMultisampleQualityLevels(dxgiFormat, samples, &qualityLevels);
+            if (qualityLevels > 0)
+            {
+                break;
+            }
+        }
 
-        Size = new Size((int)swapChainDesc.Width, (int)swapChainDesc.Height);
-
-        TextureDescription colorTextureDesc = TextureDescription.Texture2D(ColorFormat, Size.Width, Size.Height, 1, TextureUsage.RenderTarget);
-
-        ID3D11Texture2D* d3dHandle = default;
-        ThrowIfFailed(
-            _swapChain.Get()->GetBuffer(0, __uuidof<ID3D11Texture2D>(), (void**)&d3dHandle)
-            );
-        _colorTexture = new D3D11Texture(this, colorTextureDesc, d3dHandle);
+        return (TextureSampleCount)samples;
     }
 
     public override bool BeginFrame()
@@ -283,7 +162,6 @@ internal sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
 
     public override void EndFrame()
     {
-        _swapChain.Get()->Present(1, 0);
     }
 
     protected override GraphicsBuffer CreateBufferCore(in BufferDescription description, void* initialData)
@@ -309,6 +187,11 @@ internal sealed unsafe class D3D11GraphicsDevice : GraphicsDevice
     public override Pipeline CreateRenderPipeline(in RenderPipelineDescription description)
     {
         return new D3D11Pipeline(this, description);
+    }
+
+    protected override SwapChain CreateSwapChainCore(SurfaceSource surface, in SwapChainDescription description)
+    {
+        return new D3D11SwapChain(this, surface, description);
     }
 
 #if DEBUG

@@ -5,6 +5,7 @@ using Vortice.Mathematics;
 using Win32;
 using Win32.Graphics.Direct3D11;
 using D3D11BufferDesc = Win32.Graphics.Direct3D11.BufferDescription;
+using static Win32.Graphics.Direct3D11.Apis;
 
 namespace Alimer.Graphics.D3D11;
 
@@ -17,19 +18,38 @@ internal sealed unsafe class D3D11Buffer : GraphicsBuffer
     {
         uint size = (uint)description.Size;
         BindFlags bindFlags = BindFlags.None;
-        Usage usage = Win32.Graphics.Direct3D11.Usage.Default;
-        CpuAccessFlags cpuAccessFlags = CpuAccessFlags.None;
+        Usage d3dUsage = D3D11_USAGE_DEFAULT;
+        CpuAccessFlags cpuAccessFlags = 0;
+        ResourceMiscFlags miscFlags = ResourceMiscFlags.None;
 
         if ((description.Usage & BufferUsage.Constant) != BufferUsage.None)
         {
-            size = MathHelper.AlignUp(size, 64u);
-            bindFlags = BindFlags.ConstantBuffer;
-            usage = Win32.Graphics.Direct3D11.Usage.Dynamic;
-            cpuAccessFlags = CpuAccessFlags.Write;
+            size = MathHelper.AlignUp(size, device.Limits.MinConstantBufferOffsetAlignment);
+            bindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            d3dUsage = D3D11_USAGE_DYNAMIC;
+            cpuAccessFlags = D3D11_CPU_ACCESS_WRITE;
             IsDynamic = true;
         }
         else
         {
+            switch (description.CpuAccess)
+            {
+                case CpuAccessMode.None:
+                    d3dUsage = D3D11_USAGE_DEFAULT;
+                    cpuAccessFlags = 0;
+                    break;
+
+                case CpuAccessMode.Read:
+                    d3dUsage = D3D11_USAGE_STAGING;
+                    cpuAccessFlags = D3D11_CPU_ACCESS_READ;
+                    break;
+
+                case CpuAccessMode.Write:
+                    d3dUsage = D3D11_USAGE_DYNAMIC;
+                    cpuAccessFlags =  D3D11_CPU_ACCESS_WRITE;
+                    break;
+            }
+
             if ((description.Usage & BufferUsage.Vertex) != BufferUsage.None)
             {
                 bindFlags |= BindFlags.VertexBuffer;
@@ -39,9 +59,25 @@ internal sealed unsafe class D3D11Buffer : GraphicsBuffer
             {
                 bindFlags |= BindFlags.IndexBuffer;
             }
+
+            if ((description.Usage & BufferUsage.ShaderRead) != BufferUsage.None
+                && d3dUsage != D3D11_USAGE_STAGING)
+            {
+                bindFlags |= BindFlags.ShaderResource;
+            }
+
+            if ((description.Usage & BufferUsage.ShaderWrite) != BufferUsage.None)
+            {
+                bindFlags |= D3D11_BIND_UNORDERED_ACCESS;
+            }
+
+            if ((description.Usage & BufferUsage.Indirect) != BufferUsage.None)
+            {
+                miscFlags |= D3D11_RESOURCE_MISC_DRAWINDIRECT_ARGS;
+            }
         }
 
-        D3D11BufferDesc d3dDesc = new(size, bindFlags, usage, cpuAccessFlags);
+        D3D11BufferDesc d3dDesc = new(size, bindFlags, d3dUsage, cpuAccessFlags, miscFlags);
 
         SubresourceData* pInitialData = default;
         SubresourceData subresourceData = default;

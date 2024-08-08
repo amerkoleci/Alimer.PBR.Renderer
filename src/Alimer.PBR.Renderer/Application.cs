@@ -7,9 +7,9 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Alimer.Graphics;
 using CommunityToolkit.Diagnostics;
-using SDL;
+using SDL3;
 using Vortice.Mathematics;
-using static SDL.SDL;
+using static SDL3.SDL3;
 using Win32.Graphics.Direct3D.Fxc;
 using static Win32.Graphics.Direct3D.Fxc.Apis;
 using System.Text;
@@ -30,6 +30,8 @@ public sealed class Application : GraphicsObject
     private readonly List<IDisposable> _disposables = [];
     private readonly GraphicsDevice _graphicsDevice;
     private readonly SDL_Window _window;
+    private readonly SwapChain _swapChain;
+
     private bool _exitRequested;
     private ViewSettings _viewSettings;
     private float _scenePitch = 0.0f;
@@ -74,23 +76,46 @@ public sealed class Application : GraphicsObject
     private readonly ConstantBuffer<PerViewData> _perViewData;
     private readonly ConstantBuffer<ShadingCB> _shadingCB;
 
-    public SizeI Size { get; private set; }
+    public GraphicsFactory GraphicsFactory { get; }
 
-    public unsafe Application(GraphicsBackend graphicsBackend, int width = 1024, int height = 800, TextureSampleCount maxSamples = TextureSampleCount.Count16)
+    public SizeI Size { get; private set; }
+    public TextureSampleCount ColorSampleCount { get; } = TextureSampleCount.Count1;
+    public TextureSampleCount DepthStencilSampleCount { get; } = TextureSampleCount.Count1;
+
+    public unsafe Application(GraphicsBackend preferredBackend, int width = 1024, int height = 800, TextureSampleCount maxSamples = TextureSampleCount.Count16)
     {
-        SDL_GetVersion(out SDL_version version);
-        //Log.Info($"SDL v{version.major}.{version.minor}.{version.patch}");
+        int version = SDL_GetVersion();
+        string? revision = SDL_GetRevision();
+        Console.WriteLine($"SDL v{SDL_VERSIONNUM_MAJOR(version)}.{SDL_VERSIONNUM_MINOR(version)}.{SDL_VERSIONNUM_MICRO(version)}");
 
         // Init SDL
-        if (SDL_Init(SDL_InitFlags.Timer | SDL_InitFlags.Video | SDL_InitFlags.Events) != 0)
+        if (SDL_Init(SDL_InitFlags.Video) != 0)
         {
-            string error = SDL_GetErrorString();
+            string error = SDL_GetError()!;
             throw new Exception($"Failed to start SDL2: {error}");
+        }
+
+        GraphicsFactoryDescription factoryDescription = new()
+        {
+            PreferredBackend = preferredBackend,
+#if DEBUG
+            ValidationMode = ValidationMode.Enabled,
+#endif
+        };
+
+        GraphicsFactory = GraphicsFactory.Create(in factoryDescription);
+
+        GraphicsDeviceDescription deviceDescription = new();
+        _graphicsDevice = GraphicsFactory.CreateDevice(in deviceDescription);
+        if (maxSamples > TextureSampleCount.Count1)
+        {
+            ColorSampleCount = _graphicsDevice.QueryMaxTextureSampleCount(TextureFormat.Rgba16Float);
+            DepthStencilSampleCount = _graphicsDevice.QueryMaxTextureSampleCount(TextureFormat.Depth24UnormStencil8);
         }
 
         SDL_WindowFlags flags = SDL_WindowFlags.Hidden | SDL_WindowFlags.Resizable;
 
-        _window = SDL_CreateWindow($"Physically Based Rendering ({graphicsBackend})", width, height, flags);
+        _window = SDL_CreateWindow($"Physically Based Rendering ({GraphicsFactory.Backend})", width, height, flags);
         SDL_SetWindowPosition(_window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
 
         Size = new(width, height);
@@ -98,35 +123,43 @@ public sealed class Application : GraphicsObject
         bool isFullscreen = (SDL_GetWindowFlags(_window) & SDL_WindowFlags.Fullscreen) != 0;
 
         // Native handle
-        nint contextHandle = 0;
-        nint windowHandle = 0;
+        SurfaceSource? surface = default;
         if (OperatingSystem.IsWindows())
         {
-            windowHandle = SDL_GetProperty(SDL_GetWindowProperties(_window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, IntPtr.Zero);
+            surface = SurfaceSource.CreateWin32(0, SDL_GetPointerProperty(SDL_GetWindowProperties(_window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, IntPtr.Zero));
         }
         else if (OperatingSystem.IsMacOS() || OperatingSystem.IsMacCatalyst())
         {
             // the (__unsafe_unretained) NSWindow associated with the window
-            windowHandle = SDL_GetProperty(SDL_GetWindowProperties(_window), SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, IntPtr.Zero);
+            // TODO: This is cocoa, create metal layer
+            surface = SurfaceSource.CreateMetalLayer(SDL_GetPointerProperty(SDL_GetWindowProperties(_window), SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, IntPtr.Zero));
         }
         else if (OperatingSystem.IsLinux())
         {
-            if (SDL_GetCurrentVideoDriverString() == "wayland")
+            if (SDL_GetCurrentVideoDriver() == "wayland")
             {
                 // Wayland
-                contextHandle = SDL_GetProperty(SDL_GetWindowProperties(_window), SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, IntPtr.Zero);
-                windowHandle = SDL_GetProperty(SDL_GetWindowProperties(_window), SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, IntPtr.Zero);
+                surface = SurfaceSource.CreateWaylandSurface(
+                    SDL_GetPointerProperty(SDL_GetWindowProperties(_window), SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, IntPtr.Zero),
+                    SDL_GetPointerProperty(SDL_GetWindowProperties(_window), SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, IntPtr.Zero)
+                    );
             }
             else
             {
                 // X11
-                contextHandle = SDL_GetProperty(SDL_GetWindowProperties(_window), SDL_PROP_WINDOW_X11_DISPLAY_POINTER, IntPtr.Zero);
-                windowHandle = new IntPtr(SDL_GetNumberProperty(SDL_GetWindowProperties(_window), SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0));
+                surface = SurfaceSource.CreateXlibWindow(
+                    SDL_GetPointerProperty(SDL_GetWindowProperties(_window), SDL_PROP_WINDOW_X11_DISPLAY_POINTER, IntPtr.Zero),
+                    (ulong)SDL_GetNumberProperty(SDL_GetWindowProperties(_window), SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0)
+                    );
             }
-
         }
 
-        _graphicsDevice = GraphicsDevice.CreateDefault(graphicsBackend, contextHandle, windowHandle, isFullscreen, maxSamples);
+        if (surface is null)
+            throw new InvalidOperationException("Invalid surface");
+
+        SwapChainDescription swapChainDescription = new();
+        _swapChain = _graphicsDevice.CreateSwapChain(surface, in swapChainDescription);
+
         _viewSettings = new(0.0f, 0.0f, 150.0f, 45.0f);
 
         _lights[0].Direction = Vector3.Normalize(new Vector3(-1.0f, 0.0f, 0.0f));
@@ -139,18 +172,18 @@ public sealed class Application : GraphicsObject
         _lights[2].Radiance = Vector3.One;
 
         TextureUsage colorTextureUsage = TextureUsage.RenderTarget;
-        if (_graphicsDevice.SampleCount == TextureSampleCount.Count1)
+        if (ColorSampleCount == TextureSampleCount.Count1)
         {
             colorTextureUsage |= TextureUsage.ShaderRead;
         }
 
-        TextureDescription colorTextureDesc = TextureDescription.Texture2D(TextureFormat.Rgba16Float, width, height, 1, colorTextureUsage, _graphicsDevice.SampleCount);
-        TextureDescription depthStencilTextureDesc = TextureDescription.Texture2D(TextureFormat.Depth32FloatStencil8, width, height, 1, TextureUsage.RenderTarget, _graphicsDevice.SampleCount);
+        TextureDescription colorTextureDesc = TextureDescription.Texture2D(TextureFormat.Rgba16Float, width, height, 1, colorTextureUsage, ColorSampleCount);
+        TextureDescription depthStencilTextureDesc = TextureDescription.Texture2D(TextureFormat.Depth32FloatStencil8, width, height, 1, TextureUsage.RenderTarget, DepthStencilSampleCount);
 
         _fboColorTexture = AddDisposable(_graphicsDevice.CreateTexture(colorTextureDesc));
         _fboDepthStencilTexture = AddDisposable(_graphicsDevice.CreateTexture(depthStencilTextureDesc));
 
-        if (_graphicsDevice.SampleCount > TextureSampleCount.Count1)
+        if (ColorSampleCount > TextureSampleCount.Count1)
         {
             TextureDescription resolveColorTextureDesc = TextureDescription.Texture2D(TextureFormat.Rgba16Float, width, height, 1,
                 TextureUsage.ShaderRead | TextureUsage.RenderTarget, TextureSampleCount.Count1);
@@ -454,8 +487,10 @@ public sealed class Application : GraphicsObject
             }
         }
 
+        _swapChain.Dispose();
         SDL_DestroyWindow(_window);
         _graphicsDevice.Dispose();
+        GraphicsFactory.Dispose();
 
         SDL_Quit();
     }
@@ -478,12 +513,12 @@ public sealed class Application : GraphicsObject
 
         CommandContext context = _graphicsDevice.DefaultContext;
 
-        Matrix4x4 projectionMatrix = Matrix4x4.CreatePerspectiveFieldOfView(MathHelper.ToRadians(_viewSettings.FieldOfView), (float)Size.Width / Size.Height, 1.0f, 1000.0f);
+        Matrix4x4 projectionMatrix = Matrix4x4.CreatePerspectiveFieldOfViewLeftHanded(MathHelper.ToRadians(_viewSettings.FieldOfView), (float)Size.Width / Size.Height, 1.0f, 1000.0f);
 
         Matrix4x4 viewRotationMatrix = EulerAngleXY(_viewSettings.Pitch, _viewSettings.Yaw);
         Matrix4x4 sceneRotationMatrix = EulerAngleXY(_scenePitch, _sceneYaw);
 
-        Matrix4x4 viewMatrix = viewRotationMatrix * Matrix4x4.CreateTranslation(0.0f, 0.0f, -_viewSettings.Distance);
+        Matrix4x4 viewMatrix = viewRotationMatrix * Matrix4x4.CreateTranslation(0.0f, 0.0f, _viewSettings.Distance);
         Matrix4x4 viewProjectionMatrix = Matrix4x4.Multiply(viewMatrix, projectionMatrix);
 
         Vector3 eyePosition = Vector3.Zero;
@@ -593,7 +628,7 @@ public sealed class Application : GraphicsObject
         }
 
         // Draw a full screen triangle for postprocessing/tone mapping.
-        RenderPassDescription backBufferRenderPass = new(new RenderPassColorAttachment(_graphicsDevice.ColorTexture))
+        RenderPassDescription backBufferRenderPass = new(new RenderPassColorAttachment(_swapChain.GetCurrentTexture()!))
         {
             Label = "BackBuffer"u8
         };
@@ -608,6 +643,7 @@ public sealed class Application : GraphicsObject
 
         context.Flush();
         _graphicsDevice.EndFrame();
+        _swapChain.Present();
     }
 
     private unsafe void PollSDLEvents()
@@ -684,15 +720,15 @@ public sealed class Application : GraphicsObject
                 break;
 
             case SDL_EventType.KeyDown:
-                if (evt.key.keysym.sym == SDLK_F1)
+                if (evt.key.key == SDL_Keycode.F1)
                 {
                     _lights[0].Enabled = !_lights[0].Enabled;
                 }
-                else if (evt.key.keysym.sym == SDLK_F2)
+                else if (evt.key.key == SDL_Keycode.F2)
                 {
                     _lights[1].Enabled = !_lights[1].Enabled;
                 }
-                else if (evt.key.keysym.sym == SDLK_F3)
+                else if (evt.key.key == SDL_Keycode.F3)
                 {
                     _lights[2].Enabled = !_lights[2].Enabled;
                 }

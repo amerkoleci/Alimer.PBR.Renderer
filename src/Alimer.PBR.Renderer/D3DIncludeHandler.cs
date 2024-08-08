@@ -15,7 +15,7 @@ internal unsafe struct D3DIncludeHandler : D3DIncludeHandler.Interface
     /// <summary>
     /// The shared method table pointer for all <see cref="D3DIncludeHandler"/> instances.
     /// </summary>
-    private static readonly void** Vtbl = InitVtbl();
+    private static readonly void** s_vtbl = InitVtbl();
 
     /// <summary>
     /// Builds the custom method table pointer for <see cref="D3DIncludeHandler"/>.
@@ -60,7 +60,7 @@ internal unsafe struct D3DIncludeHandler : D3DIncludeHandler.Interface
     public static D3DIncludeHandler* Create()
     {
         D3DIncludeHandler* @this = (D3DIncludeHandler*)NativeMemory.Alloc((nuint)sizeof(D3DIncludeHandler));
-        @this->lpVtbl = Vtbl;
+        @this->lpVtbl = s_vtbl;
 
         return @this;
     }

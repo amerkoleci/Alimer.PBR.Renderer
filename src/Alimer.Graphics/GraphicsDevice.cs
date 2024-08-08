@@ -10,20 +10,10 @@ public abstract unsafe class GraphicsDevice : GraphicsObject
 {
     public static readonly int NumFramesInFlight = 2;
 
-    protected GraphicsDevice(GraphicsBackend backend, in nint window, bool isFullscreen)
+    protected GraphicsDevice(in GraphicsDeviceDescription description)
+        : base(description.Label)
     {
-        Backend = backend;
-        Window = window;
-        IsFullscreen = isFullscreen;
     }
-
-    public readonly nint Window;
-    public readonly bool IsFullscreen;
-
-    /// <summary>
-    /// Get the device backend type.
-    /// </summary>
-    public GraphicsBackend Backend { get; }
 
     /// <summary>
     /// Get the device limits.
@@ -31,18 +21,9 @@ public abstract unsafe class GraphicsDevice : GraphicsObject
     public abstract GraphicsDeviceLimits Limits { get; }
 
     public abstract CommandContext DefaultContext { get; }
-    public abstract Texture ColorTexture { get; }
-    public abstract TextureSampleCount SampleCount { get; }
 
-    public static GraphicsDevice CreateDefault(GraphicsBackend graphicsBackend,
-        nint contextHandle, nint windowHandle,
-        bool isFullscreen, TextureSampleCount maxSamples = TextureSampleCount.Count4)
-    {
-        if (graphicsBackend == GraphicsBackend.Direct3D12)
-            return new D3D12.D3D12GraphicsDevice(windowHandle, isFullscreen, maxSamples);
 
-        return new D3D11.D3D11GraphicsDevice(windowHandle, isFullscreen, maxSamples);
-    }
+    public abstract TextureSampleCount QueryMaxTextureSampleCount(TextureFormat format);
 
     public abstract bool BeginFrame();
     public abstract void EndFrame();
@@ -140,7 +121,16 @@ public abstract unsafe class GraphicsDevice : GraphicsObject
     public abstract Pipeline CreateComputePipeline(in ComputePipelineDescription description);
     public abstract Pipeline CreateRenderPipeline(in RenderPipelineDescription description);
 
+    public SwapChain CreateSwapChain(SurfaceSource surface, in SwapChainDescription description)
+    {
+        Guard.IsNotNull(surface, nameof(surface));
+        Guard.IsTrue(description.Format != TextureFormat.Invalid, nameof(SwapChainDescription.Format));
+
+        return CreateSwapChainCore(surface, description);
+    }
+
     protected abstract unsafe GraphicsBuffer CreateBufferCore(in BufferDescription description, void* initialData);
     protected abstract unsafe Texture CreateTextureCore(in TextureDescription description, void* initialData);
     protected abstract Sampler CreateSamplerCore(in SamplerDescription description);
+    protected abstract SwapChain CreateSwapChainCore(SurfaceSource surface, in SwapChainDescription description);
 }

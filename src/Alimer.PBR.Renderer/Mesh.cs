@@ -12,9 +12,10 @@ public sealed class Mesh : GraphicsObject
 {
     private static readonly Assimp _assImp;
     private static readonly PostProcessSteps s_postProcessSteps =
-        PostProcessSteps.FindDegenerates
+        PostProcessSteps.MakeLeftHanded
+        | PostProcessSteps.FindDegenerates
         | PostProcessSteps.FindInvalidData
-        //| PostProcessSteps.FlipUVs               // Required for Direct3D
+        | PostProcessSteps.FlipUVs               // Required for Direct3D
         | PostProcessSteps.FlipWindingOrder
         | PostProcessSteps.JoinIdenticalVertices
         | PostProcessSteps.ImproveCacheLocality
@@ -23,8 +24,8 @@ public sealed class Mesh : GraphicsObject
         | PostProcessSteps.PreTransformVertices
         | PostProcessSteps.GenerateNormals
         | PostProcessSteps.CalculateTangentSpace
-        // | PostProcessSteps.GenerateUVCoords
-        // | PostProcessSteps.SortByPrimitiveType
+         | PostProcessSteps.GenerateUVCoords
+         | PostProcessSteps.SortByPrimitiveType
         // | PostProcessSteps.Debone
         ;
 
@@ -38,15 +39,15 @@ public sealed class Mesh : GraphicsObject
         _assImp = Assimp.GetApi();
     }
 
-    private Mesh(GraphicsDevice graphicsDevice, List<VertexMesh> vertices, uint[] indices)
+    private Mesh(GraphicsDevice graphicsDevice, Span<VertexMesh> vertices, Span<uint> indices)
     {
-        VertexBuffer = graphicsDevice.CreateBuffer(vertices.ToArray(), BufferUsage.Vertex);
+        VertexBuffer = graphicsDevice.CreateBuffer(vertices, BufferUsage.Vertex);
         IndexCount = indices.Length;
 
-        IndexType = vertices.Count > 65536 ? IndexType.Uint32 : IndexType.Uint16;
+        IndexType = vertices.Length > 65536 ? IndexType.Uint32 : IndexType.Uint16;
         if (IndexType == IndexType.Uint32)
         {
-            IndexBuffer = graphicsDevice.CreateBuffer(indices.ToArray(), BufferUsage.Index);
+            IndexBuffer = graphicsDevice.CreateBuffer(indices, BufferUsage.Index);
         }
         else
         {
@@ -102,8 +103,8 @@ public sealed class Mesh : GraphicsObject
         {
         }
 
-        List<VertexMesh> vertices = new();
-        uint[] indices = Array.Empty<uint>();
+        List<VertexMesh> vertices = [];
+        uint[] indices = [];
         foreach (var mesh in sharpModel.LogicalMeshes)
         {
             foreach (var primitive in mesh.Primitives)
@@ -147,7 +148,6 @@ public sealed class Mesh : GraphicsObject
                     vertices.Add(new VertexMesh(position, normal, tangent, texcoord));
                 }
 
-
                 // Indices
                 indices = new uint[indexAccessor.Count];
 
@@ -161,7 +161,7 @@ public sealed class Mesh : GraphicsObject
             }
         }
 
-        return new(graphicsDevice, vertices, indices);
+        return new(graphicsDevice, vertices.ToArray(), indices);
     }
 
     public static unsafe Mesh FromMemory(GraphicsDevice graphicsDevice, byte[] data)
@@ -179,8 +179,7 @@ public sealed class Mesh : GraphicsObject
 
         bool hasTangentsAndBitangents = mesh->MTangents is not null;
         bool hasHasTexCoords0 = mesh->MTextureCoords[0] is not null;
-        List<VertexMesh> vertices = new((int)mesh->MNumVertices);
-        List<uint> indices = new((int)mesh->MNumFaces);
+        Span<VertexMesh> vertices = new VertexMesh[(int)mesh->MNumVertices];
 
         for (int i = 0; i < (int)mesh->MNumVertices; ++i)
         {
@@ -196,20 +195,25 @@ public sealed class Mesh : GraphicsObject
 
             if (hasHasTexCoords0)
             {
-                texcoord = new Vector2(mesh->MTextureCoords[0][i].X, 1.0f - mesh->MTextureCoords[0][i].Y);
+                texcoord = new Vector2(mesh->MTextureCoords[0][i].X, mesh->MTextureCoords[0][i].Y);
             }
 
-            vertices.Add(new VertexMesh(position, normal, tangent, texcoord));
+            vertices[i] = new VertexMesh(position, normal, tangent, texcoord);
         }
 
+        Span<uint> indices = stackalloc uint[(int)mesh->MNumFaces * 3];
+        int index = 0;
         for (int i = 0; i < (int)mesh->MNumFaces; ++i)
         {
             Guard.IsTrue(mesh->MFaces[i].MNumIndices == 3);
-            indices.Add(mesh->MFaces[i].MIndices[0]);
-            indices.Add(mesh->MFaces[i].MIndices[1]);
-            indices.Add(mesh->MFaces[i].MIndices[2]);
+            indices[index++] = mesh->MFaces[i].MIndices[0];
+            indices[index++] = mesh->MFaces[i].MIndices[1];
+            indices[index++] = mesh->MFaces[i].MIndices[2];
         }
 
-        return new(graphicsDevice, vertices, indices.ToArray());
+        // Material
+        Silk.NET.Assimp.Material* material = scene->MMaterials[0];
+
+        return new(graphicsDevice, vertices, indices);
     }
 }

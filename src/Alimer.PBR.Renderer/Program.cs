@@ -13,7 +13,7 @@ public static class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        using Application app = new(GraphicsBackend.Direct3D11);
+        using Application app = new(GraphicsBackend.D3D11);
         app.Run();
     }
 }

@@ -30,8 +30,8 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
     private readonly ID3D11RenderTargetView*[] _rtvs = new ID3D11RenderTargetView*[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT];
     private ID3D11DepthStencilView* DSV = null;
 
-    private readonly ID3D11Buffer*[] _vertexBindings = new ID3D11Buffer*[8];
-    private uint[] _vertexOffsets = new uint[8];
+    private readonly ID3D11Buffer*[] _vertexBindings = new ID3D11Buffer*[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT];
+    private readonly uint[] _vertexOffsets = new uint[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT];
 
     private readonly ID3D11Buffer*[] _constantBuffers = new ID3D11Buffer*[4];
     private readonly ID3D11SamplerState*[] _samplers = new ID3D11SamplerState*[16];
@@ -316,21 +316,21 @@ internal sealed unsafe class D3D11CommandContext : CommandContext
         }
     }
 
-    public override void SetVertexBuffer(uint slot, GraphicsBuffer buffer, uint offset = 0)
+    public override void SetVertexBuffer(uint slot, GraphicsBuffer buffer, ulong offset = 0)
     {
         var d3dBuffer = ((D3D11Buffer)buffer);
 
         if (_vertexBindings[slot] != d3dBuffer.Handle || _vertexOffsets[slot] != offset)
         {
             _vertexBindings[slot] = d3dBuffer.Handle;
-            _vertexOffsets[slot] = offset;
+            _vertexOffsets[slot] = (uint)offset;
         }
     }
 
-    public override void SetIndexBuffer(GraphicsBuffer buffer, uint offset, IndexType indexType)
+    public override void SetIndexBuffer(GraphicsBuffer buffer, ulong offset, IndexType indexType)
     {
-        var d3dBuffer = ((D3D11Buffer)buffer).Handle;
-        _context->IASetIndexBuffer(d3dBuffer, indexType.ToDxgiFormat(), offset);
+        ID3D11Buffer* d3dBuffer = ((D3D11Buffer)buffer).Handle;
+        _context->IASetIndexBuffer(d3dBuffer, indexType.ToDxgiFormat(), (uint)offset);
     }
 
     public override void SetConstantBuffer(int index, GraphicsBuffer buffer)

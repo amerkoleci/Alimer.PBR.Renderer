@@ -16,10 +16,10 @@ public abstract class GraphicsBuffer : GraphicsResource
     /// <summary>
     /// Gets the <see cref="BufferUsage"/>.
     /// </summary>
-    public BufferUsage Usage { get; init; }
+    public BufferUsage Usage { get; }
 
     /// <summary>
     /// Gets the size in bytes of the buffer.
     /// </summary>
-    public uint Size { get; init; }
+    public ulong Size { get; }
 }

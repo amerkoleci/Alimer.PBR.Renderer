@@ -5,9 +5,8 @@ namespace Alimer.Graphics;
 
 public enum GraphicsBackend
 {
-    Direct3D11,
-    Direct3D12,
-    Metal,
+    D3D11,
+    D3D12,
     Vulkan,
     OpenGL,
 

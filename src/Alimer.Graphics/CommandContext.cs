@@ -61,8 +61,8 @@ public abstract class CommandContext : GraphicsObject
 
     public abstract void SetPipeline(Pipeline pipeline);
 
-    public abstract void SetVertexBuffer(uint slot, GraphicsBuffer buffer, uint offset = 0);
-    public abstract void SetIndexBuffer(GraphicsBuffer buffer, uint offset, IndexType indexType);
+    public abstract void SetVertexBuffer(uint slot, GraphicsBuffer buffer, ulong offset = 0);
+    public abstract void SetIndexBuffer(GraphicsBuffer buffer, ulong offset, IndexType indexType);
 
     public abstract void SetConstantBuffer(int index, GraphicsBuffer buffer);
     public abstract void SetSampler(int index, Sampler sampler);
@@ -147,14 +147,9 @@ public abstract class CommandContext : GraphicsObject
         }
     }
 
-    public readonly struct ScopedRenderPass : IDisposable
+    public readonly struct ScopedRenderPass(CommandContext commandBuffer) : IDisposable
     {
-        private readonly CommandContext _commandBuffer;
-
-        public ScopedRenderPass(CommandContext commandBuffer)
-        {
-            _commandBuffer = commandBuffer;
-        }
+        private readonly CommandContext _commandBuffer = commandBuffer;
 
         public void Dispose()
         {

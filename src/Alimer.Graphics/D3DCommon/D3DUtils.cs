@@ -5,6 +5,8 @@ using Win32;
 using Win32.Graphics.Dxgi.Common;
 using D3DPrimitiveTopology = Win32.Graphics.Direct3D.PrimitiveTopology;
 using static Win32.Graphics.Dxgi.Common.Apis;
+using System.Runtime.CompilerServices;
+using System.Diagnostics;
 
 namespace Alimer.Graphics;
 
@@ -148,9 +150,34 @@ internal static class D3DUtils
         {
             case IndexType.Uint16: return Format.R16Uint;
             case IndexType.Uint32: return Format.R32Uint;
-           
+
             default:
                 return Format.R16Uint;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Format ToDxgiSwapChainFormat(this TextureFormat format)
+    {
+        // FLIP_DISCARD and FLIP_SEQEUNTIAL swapchain buffers only support these formats
+        switch (format)
+        {
+            case TextureFormat.Rgba16Float:
+                return DXGI_FORMAT_R16G16B16A16_FLOAT;
+
+            case TextureFormat.Bgra8Unorm:
+            case TextureFormat.Bgra8UnormSrgb:
+                return DXGI_FORMAT_B8G8R8A8_UNORM;
+
+            case TextureFormat.Rgba8Unorm:
+            case TextureFormat.Rgba8UnormSrgb:
+                return DXGI_FORMAT_R8G8B8A8_UNORM;
+
+            case TextureFormat.RGB10A2Unorm:
+                return DXGI_FORMAT_R10G10B10A2_UNORM;
+
+            default:
+                return DXGI_FORMAT_B8G8R8A8_UNORM;
         }
     }
 
@@ -169,9 +196,32 @@ internal static class D3DUtils
         }
     }
 
-    public static unsafe uint GetRefCount(IUnknown* @interface)
+
+    public static uint ToBufferCount(this PresentMode mode)
     {
-        @interface->AddRef();
-        return @interface->Release();
+        switch (mode)
+        {
+            case PresentMode.Immediate:
+            case PresentMode.Fifo:
+                return 2;
+            case PresentMode.Mailbox:
+                return 3;
+            default:
+                return 2;
+        }
+    }
+
+    public static uint ToSyncInterval(this PresentMode mode)
+    {
+        switch (mode)
+        {
+            case PresentMode.Immediate:
+            case PresentMode.Mailbox:
+                return 0u;
+
+            case PresentMode.Fifo:
+            default:
+                return 1u;
+        }
     }
 }

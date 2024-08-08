@@ -19,7 +19,7 @@ internal sealed unsafe class D3D11Texture : Texture
     private readonly Dictionary<int, ComPtr<ID3D11DepthStencilView>> _dsvs = new();
     private readonly Dictionary<int, ComPtr<ID3D11UnorderedAccessView>> _uavs = new();
 
-    public D3D11Texture(D3D11GraphicsDevice device, in TextureDescription description, ID3D11Texture2D* existingHandle)
+    public D3D11Texture(GraphicsDevice device, in TextureDescription description, ID3D11Texture2D* existingHandle)
         : base(device, description)
     {
         _handle = (ID3D11Resource*)existingHandle;

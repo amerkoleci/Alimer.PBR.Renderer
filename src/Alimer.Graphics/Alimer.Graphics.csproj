@@ -4,6 +4,7 @@
 		<TargetFrameworks>net8.0</TargetFrameworks>
 		<TargetFrameworks Condition=" $([MSBuild]::IsOSPlatform('windows')) ">$(TargetFrameworks);net8.0-windows10.0.19041;</TargetFrameworks>
 		<DefineConstants>$(DefineConstants);VALIDATE_USAGE</DefineConstants>
+    <ExcludeVulkan>true</ExcludeVulkan>
 	</PropertyGroup>
 
 	<PropertyGroup Condition=" $(TargetFramework.Contains('-windows10')) ">
@@ -11,6 +12,7 @@
 	</PropertyGroup>
 
 	<PropertyGroup>
+    <DefineConstants Condition="'$(ExcludeD3D11)' == 'true'">$(DefineConstants);EXCLUDE_D3D11_BACKEND</DefineConstants>
 		<DefineConstants Condition="'$(ExcludeD3D12)' == 'true'">$(DefineConstants);EXCLUDE_D3D12_BACKEND</DefineConstants>
 		<DefineConstants Condition="'$(ExcludeVulkan)' == 'true'">$(DefineConstants);EXCLUDE_VULKAN_BACKEND</DefineConstants>
 	</PropertyGroup>
@@ -19,6 +21,7 @@
 		<Using Remove="System.Linq" />
 
 		<Compile Remove="D3D/**/*" Condition="'$(ExcludeD3D12)' == 'true'" />
+    <Compile Remove="D3D11/**/*" Condition="'$(ExcludeD3D11)' == 'true'" />
 		<Compile Remove="D3D12/**/*" Condition="'$(ExcludeD3D12)' == 'true'" />
 		<Compile Remove="Vulkan/**/*" Condition="'$(ExcludeVulkan)' == 'true'" />
 	</ItemGroup>
@@ -28,7 +31,7 @@
 		<PackageReference Include="XenoAtom.Interop" />
 
 		<PackageReference Include="Vortice.Mathematics" />
-		<PackageReference Include="Vortice.Win32.Graphics.Direct3D11" Condition="'$(ExcludeD3D12)' != 'true'" />
+		<PackageReference Include="Vortice.Win32.Graphics.Direct3D11" Condition="'$(ExcludeD3D11)' != 'true'" />
 		<PackageReference Include="Vortice.Win32.Graphics.Direct3D12" Condition="'$(ExcludeD3D12)' != 'true'" />
 		<PackageReference Include="Vortice.Vulkan" Condition="'$(ExcludeVulkan)' != 'true'" />
 		<PackageReference Include="Vortice.VulkanMemoryAllocator" Condition="'$(ExcludeVulkan)' != 'true'" />
